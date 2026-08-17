@@ -1,0 +1,740 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SSMA 360° — Gestão Inteligente de Segurança, Saúde e Meio Ambiente</title>
+<style>
+  :root{
+    --primary:#059669;
+    --primary-dark:#047857;
+    --primary-light:#e6f6f0;
+    --accent:#ea580c;
+    --accent-light:#feeadd;
+    --navy:#0e1a2b;
+    --gray:#64748b;
+    --gray-light:#f3f5f8;
+    --border:#e0e6ed;
+    --green:#16a34a;--green-light:#e8f7ee;
+    --yellow:#ca8a04;--yellow-light:#fdf6dc;
+    --orange:#ea580c;--orange-light:#feeadd;
+    --red:#dc2626;--red-light:#fdecea;
+    --blue:#2563eb;--blue-light:#e8effd;
+    --purple:#7c3aed;--purple-light:#f1e9fe;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;font-family:'Segoe UI',system-ui,-apple-system,sans-serif;}
+  body{background:var(--gray-light);color:var(--navy);min-height:100vh;}
+  .hide{display:none!important;}
+
+  .btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;padding:11px 18px;border-radius:10px;font-size:13.5px;font-weight:700;cursor:pointer;border:none;transition:.15s;}
+  .btn-primary{background:var(--primary);color:#fff;}
+  .btn-primary:hover{background:var(--primary-dark);}
+  .btn-accent{background:var(--accent);color:#fff;}
+  .btn-outline{background:#fff;color:var(--primary);border:1.5px solid var(--primary);}
+  .btn-outline:hover{background:var(--primary-light);}
+  .btn-ghost{background:transparent;color:var(--gray);border:1.5px solid var(--border);}
+  .btn-ghost:hover{background:#fff;}
+  .btn-sm{padding:6px 11px;font-size:12px;border-radius:8px;}
+  .btn-block{width:100%;display:flex;}
+
+  .field{margin-bottom:14px;}
+  .field label{display:block;font-size:12.5px;font-weight:600;margin-bottom:6px;}
+  .field input,.field select,.field textarea{width:100%;padding:11px 13px;border:1.5px solid var(--border);border-radius:9px;font-size:13.5px;background:#fff;outline:none;color:var(--navy);}
+  .field input:focus,.field select:focus,.field textarea:focus{border-color:var(--primary);}
+  .field textarea{resize:vertical;min-height:70px;}
+  .row2{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+  .row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;}
+  @media(max-width:700px){.row2,.row3{grid-template-columns:1fr;}}
+
+  .pill{display:inline-block;font-size:11px;font-weight:700;border-radius:12px;padding:4px 10px;white-space:nowrap;}
+  .pill.ok{background:var(--green-light);color:var(--green);}
+  .pill.warn{background:var(--yellow-light);color:var(--yellow);}
+  .pill.orange{background:var(--orange-light);color:var(--orange);}
+  .pill.bad{background:var(--red-light);color:var(--red);}
+  .pill.info{background:var(--blue-light);color:var(--blue);}
+  .pill.purple{background:var(--purple-light);color:var(--purple);}
+  .pill.gray{background:#eaeef3;color:var(--gray);}
+
+  /* ============ LOGIN ============ */
+  #view-login{min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#0e1a2b 0%,#0b4f43 60%,#059669 100%);padding:20px;}
+  .login-card{background:#fff;border-radius:20px;padding:38px 34px;width:440px;max-width:100%;box-shadow:0 24px 70px rgba(0,0,0,.45);}
+  .login-logo{text-align:center;margin-bottom:22px;}
+  .login-logo .circ{width:74px;height:74px;border-radius:20px;background:linear-gradient(135deg,#059669,#10b981);display:flex;align-items:center;justify-content:center;font-size:34px;margin:0 auto 14px;color:#fff;}
+  .login-logo h1{font-size:21px;font-weight:800;}
+  .login-logo h1 span{color:var(--primary);}
+  .login-logo p{font-size:12px;color:var(--gray);margin-top:4px;}
+  .tenant-note{background:var(--primary-light);border-radius:11px;padding:11px 14px;font-size:12px;color:var(--primary-dark);margin-bottom:16px;line-height:1.5;}
+
+  /* ============ SHELL ============ */
+  .shell{display:flex;min-height:100vh;}
+  .sidebar{width:238px;background:#0e1a2b;color:#a9b6c6;display:flex;flex-direction:column;flex-shrink:0;position:sticky;top:0;height:100vh;overflow-y:auto;}
+  .sidebar .brand{padding:18px;color:#fff;display:flex;align-items:center;gap:11px;border-bottom:1px solid #1b2b40;}
+  .sidebar .brand .mark{width:40px;height:40px;border-radius:12px;background:var(--primary);display:flex;align-items:center;justify-content:center;font-size:19px;flex-shrink:0;}
+  .sidebar .brand .t{font-size:15px;font-weight:800;}
+  .sidebar .brand small{display:block;font-size:9.5px;color:#7e8da0;font-weight:600;letter-spacing:.4px;}
+  .sidebar nav{flex:1;padding:8px 0;}
+  .sidebar .sec{font-size:9.5px;font-weight:800;text-transform:uppercase;letter-spacing:1.2px;color:#5c6b80;padding:14px 18px 6px;}
+  .sidebar nav button{display:flex;align-items:center;gap:10px;width:calc(100% - 14px);background:none;border:none;color:#a9b6c6;font-size:13px;padding:10px 18px;cursor:pointer;text-align:left;border-radius:0 22px 22px 0;margin-right:14px;transition:.15s;}
+  .sidebar nav button:hover{background:#1b2b40;color:#fff;}
+  .sidebar nav button.on{background:var(--primary);color:#fff;}
+  .sidebar .foot{padding:13px 18px;border-top:1px solid #1b2b40;font-size:10.5px;color:#7e8da0;line-height:1.6;}
+
+  .main{flex:1;min-width:0;display:flex;flex-direction:column;}
+  .topbar{background:#fff;border-bottom:1px solid var(--border);padding:11px 24px;display:flex;align-items:center;gap:14px;position:sticky;top:0;z-index:20;flex-wrap:wrap;}
+  .topbar .lbl{font-size:11px;color:var(--gray);font-weight:700;text-transform:uppercase;letter-spacing:.5px;}
+  .topbar select{padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;font-size:13px;font-weight:700;color:var(--navy);background:#fff;outline:none;cursor:pointer;}
+  .topbar .user{display:flex;align-items:center;gap:10px;margin-left:auto;font-size:13px;font-weight:600;}
+  .topbar .user small{display:block;font-weight:400;color:var(--gray);font-size:11px;}
+  .topbar .av{width:36px;height:36px;border-radius:50%;background:var(--primary);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:13px;}
+
+  .content{padding:22px 24px 60px;max-width:1240px;width:100%;}
+  .page-head{display:flex;align-items:center;justify-content:space-between;gap:14px;margin-bottom:18px;flex-wrap:wrap;}
+  .page-head h2{font-size:19px;font-weight:800;}
+  .page-head p{font-size:12.5px;color:var(--gray);margin-top:3px;}
+  .screen{display:none;}
+  .screen.active{display:block;}
+
+  .stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:13px;margin-bottom:20px;}
+  .stat{background:#fff;border-radius:14px;padding:15px;box-shadow:0 1px 3px rgba(14,26,43,.07);position:relative;}
+  .stat .lbl{font-size:11px;color:var(--gray);font-weight:700;}
+  .stat .num{font-size:23px;font-weight:800;margin-top:3px;}
+  .stat .sub{font-size:10.5px;font-weight:700;margin-top:2px;}
+  .panel{background:#fff;border-radius:14px;padding:18px;box-shadow:0 1px 3px rgba(14,26,43,.07);margin-bottom:16px;}
+  .panel h3{font-size:14.5px;font-weight:800;margin-bottom:13px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
+  .grid32{display:grid;grid-template-columns:1.5fr 1fr;gap:16px;}
+  @media(max-width:980px){.grid2,.grid32{grid-template-columns:1fr;}}
+
+  .tbl-wrap{overflow-x:auto;}
+  table.tbl{width:100%;border-collapse:collapse;font-size:12.8px;background:#fff;}
+  .tbl th{text-align:left;font-size:10.5px;text-transform:uppercase;letter-spacing:.5px;color:var(--gray);font-weight:700;padding:9px;border-bottom:2px solid var(--border);white-space:nowrap;}
+  .tbl td{padding:9px;border-bottom:1px solid #eef1f5;vertical-align:middle;}
+  .tbl tr:hover td{background:#f8fafb;}
+  .tbl .c{text-align:center;}
+
+  /* gauge + kpis */
+  .gauge-wrap{text-align:center;padding:6px 0;}
+  .kpi-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;}
+  .kpi{border:1.5px solid var(--border);border-radius:12px;padding:13px;text-align:center;}
+  .kpi .v{font-size:21px;font-weight:800;}
+  .kpi .l{font-size:10px;color:var(--gray);font-weight:700;text-transform:uppercase;letter-spacing:.4px;margin-top:2px;}
+  .kpi .d{font-size:10px;font-weight:700;margin-top:2px;}
+
+  .esc-chain{display:flex;align-items:center;gap:4px;flex-wrap:wrap;font-size:10.5px;font-weight:700;}
+  .esc-chain span{padding:3px 8px;border-radius:9px;background:#eaeef3;color:var(--gray);}
+  .esc-chain span.done{background:var(--red-light);color:var(--red);}
+  .esc-chain i{color:#b6c2cf;font-style:normal;}
+
+  /* QR / inspeção */
+  .qr-stage{display:grid;grid-template-columns:1fr 1.4fr;gap:16px;}
+  @media(max-width:900px){.qr-stage{grid-template-columns:1fr;}}
+  .qr-card{text-align:center;padding:26px 18px;}
+  .qr-svg{width:150px;height:150px;margin:10px auto 14px;border:8px solid var(--navy);border-radius:12px;padding:8px;background:#fff;}
+  .tipo-grid{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-bottom:14px;}
+  .tipo-opt{border:2px solid var(--border);border-radius:11px;padding:11px;font-size:12px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:8px;transition:.12s;background:#fff;}
+  .tipo-opt:hover{border-color:var(--primary);}
+  .tipo-opt.sel{border-color:var(--tc);background:var(--tb);color:var(--tc);}
+  .tipo-opt .dotc{width:11px;height:11px;border-radius:50%;background:var(--tc);flex-shrink:0;}
+  .gps-badge{display:inline-flex;align-items:center;gap:7px;background:var(--blue-light);color:var(--blue);font-size:12px;font-weight:700;border-radius:10px;padding:8px 13px;}
+  .sig-canvas{border:2px dashed var(--border);border-radius:11px;background:#fff;cursor:crosshair;touch-action:none;width:100%;height:110px;}
+  .upload-box{border:2px dashed var(--border);border-radius:11px;padding:16px;text-align:center;color:var(--gray);font-size:12.5px;cursor:pointer;}
+  .upload-box:hover{border-color:var(--primary);}
+
+  /* automação */
+  .flow-steps{list-style:none;}
+  .flow-steps li{display:flex;gap:11px;align-items:flex-start;padding:9px 0;font-size:13px;opacity:.25;transition:.3s;}
+  .flow-steps li.done{opacity:1;}
+  .flow-steps li .ic{width:26px;height:26px;border-radius:50%;background:var(--primary-light);color:var(--primary);display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0;}
+  .flow-steps li small{display:block;color:var(--gray);font-size:11.5px;}
+
+  /* carteirinhas */
+  .badge-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px;}
+  .badge-card{background:linear-gradient(135deg,#0e1a2b,#173a52);border-radius:16px;padding:16px;color:#fff;position:relative;overflow:hidden;}
+  .badge-card::before{content:'';position:absolute;right:-30px;top:-30px;width:130px;height:130px;border-radius:50%;background:rgba(5,150,105,.25);}
+  .badge-top{display:flex;justify-content:space-between;align-items:center;font-size:10px;font-weight:800;letter-spacing:1px;color:#9fd8c4;margin-bottom:12px;}
+  .badge-body{display:flex;gap:13px;align-items:center;}
+  .badge-photo{width:72px;height:72px;border-radius:12px;background-size:cover;background-position:center;border:2px solid rgba(255,255,255,.35);flex-shrink:0;}
+  .badge-info .n{font-size:15px;font-weight:800;}
+  .badge-info .c{font-size:11.5px;color:#b9c6d4;margin:2px 0;}
+  .badge-foot{display:flex;justify-content:space-between;align-items:flex-end;margin-top:12px;font-size:10.5px;color:#b9c6d4;}
+  .badge-qr{width:44px;height:44px;background:#fff;border-radius:8px;padding:4px;}
+
+  .doc-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:14px;margin-bottom:18px;}
+  .doc-card{background:#fff;border-radius:14px;padding:17px;box-shadow:0 1px 3px rgba(14,26,43,.07);text-align:center;}
+  .doc-card .i{font-size:30px;margin-bottom:8px;}
+  .doc-card h4{font-size:14px;font-weight:800;}
+  .doc-card p{font-size:11.5px;color:var(--gray);margin:5px 0 12px;line-height:1.45;}
+
+  .int-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:14px;margin-bottom:18px;}
+
+  .modal-bg{position:fixed;inset:0;background:rgba(8,15,26,.6);display:none;align-items:center;justify-content:center;z-index:80;padding:18px;}
+  .modal-bg.on{display:flex;}
+  .modal{background:#fff;border-radius:17px;padding:26px;width:480px;max-width:100%;box-shadow:0 24px 60px rgba(0,0,0,.4);max-height:92vh;overflow-y:auto;}
+  .modal h3{font-size:17px;font-weight:800;margin-bottom:14px;}
+  .toast{position:fixed;bottom:26px;left:50%;transform:translateX(-50%) translateY(80px);background:#0e1a2b;color:#fff;font-size:13.5px;padding:13px 22px;border-radius:26px;box-shadow:0 8px 24px rgba(0,0,0,.35);opacity:0;transition:.3s;z-index:99;pointer-events:none;max-width:90%;text-align:center;}
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+  .hint{background:var(--primary-light);border-radius:12px;padding:12px 15px;font-size:12.5px;color:var(--primary-dark);line-height:1.55;margin-bottom:16px;}
+</style>
+</head>
+<body>
+
+<!-- ================= LOGIN ================= -->
+<div id="view-login">
+  <div class="login-card">
+    <div class="login-logo">
+      <div class="circ">🦺</div>
+      <h1>SSMA <span>360°</span> Inteligente</h1>
+      <p>Segurança · Saúde · Meio Ambiente — gestão integrada multi-cliente</p>
+    </div>
+    <div class="tenant-note">🔒 <b>Multi-tenant:</b> cada cliente/contrato tem seus dados isolados no SharePoint/Dataverse. Dashboards consolidados só para o seu perfil de acesso.</div>
+    <div class="field"><label>E-mail corporativo</label><input type="email" value="gestor@ssma360.com.br"></div>
+    <div class="field"><label>Senha</label><input type="password" value="12345678"></div>
+    <button class="btn btn-primary btn-block" onclick="login()">ENTRAR</button>
+    <p style="text-align:center;font-size:11px;color:var(--gray);margin-top:14px;">Protótipo · Power Platform (SharePoint · Power Automate · Power BI)</p>
+  </div>
+</div>
+
+<!-- ================= APP ================= -->
+<div id="app" class="hide">
+  <div class="shell">
+    <aside class="sidebar">
+      <div class="brand"><div class="mark">🦺</div><div><div class="t">SSMA 360°</div><small>GESTÃO INTELIGENTE · 2026</small></div></div>
+      <nav id="side-nav">
+        <div class="sec">Dashboards (Power BI)</div>
+        <button data-nav="exec" class="on" onclick="nav('exec')">👔 Executivo</button>
+        <button data-nav="ger" onclick="nav('ger')">📊 Gerencial</button>
+        <button data-nav="oper" onclick="nav('oper')">🛠️ Operacional</button>
+        <div class="sec">Campo</div>
+        <button data-nav="qr" onclick="nav('qr')">📱 Inspeção via QR Code</button>
+        <button data-nav="inspecoes" onclick="nav('inspecoes')">📋 Inspeções</button>
+        <button data-nav="planos" onclick="nav('planos')">🎯 Planos de ação</button>
+        <div class="sec">Saúde & Documentos</div>
+        <button data-nav="atestados" onclick="nav('atestados')">🩺 Atestados médicos</button>
+        <button data-nav="docs" onclick="nav('docs')">📄 Documentos (ASO/PGR...)</button>
+        <button data-nav="badges" onclick="nav('badges')">🪪 Carteirinhas</button>
+        <div class="sec">Plataforma</div>
+        <button data-nav="integr" onclick="nav('integr')">🔌 Integrações & Matriz</button>
+      </nav>
+      <div class="foot">Dados: SharePoint / Dataverse<br>Automação: Power Automate<br>BI: Power BI · Protótipo mock</div>
+    </aside>
+    <div class="main">
+      <div class="topbar">
+        <span class="lbl">Cliente / Contrato</span>
+        <select id="sel-cliente" onchange="setCliente(this.value)"></select>
+        <div class="user"><div><div>Rafael Martini</div><small>Gestor SSMA</small></div><div class="av">RM</div>
+        <button class="btn btn-ghost btn-sm" onclick="logout()">Sair</button></div>
+      </div>
+      <div class="content">
+
+        <!-- ===== EXECUTIVO ===== -->
+        <section class="screen active" id="screen-exec">
+          <div class="page-head"><div><h2>Dashboard Executivo</h2><p>Visão da diretoria — leitura em 30 segundos. Consolidado de todos os clientes e contratos.</p></div>
+            <span class="pill info">Atualizado há 4 min · Power BI</span></div>
+          <div class="grid32">
+            <div class="panel">
+              <h3>Índice Global SSMA <span class="pill ok">Meta: ≥ 85</span></h3>
+              <div class="gauge-wrap" id="gauge-exec"></div>
+            </div>
+            <div class="panel">
+              <h3>Indicadores consolidados</h3>
+              <div class="kpi-row" id="kpi-exec"></div>
+            </div>
+          </div>
+          <div class="panel">
+            <h3>Situação por cliente / contrato</h3>
+            <div class="tbl-wrap"><table class="tbl" id="tbl-exec-clientes"></table></div>
+          </div>
+          <div class="grid2">
+            <div class="panel"><h3>Evolução do Índice Global (6 meses)</h3><div id="chart-ig"></div></div>
+            <div class="panel"><h3>Alertas para a diretoria 🔴</h3>
+              <ul style="list-style:none;font-size:13px;line-height:2.1;">
+                <li>🔴 <b>Construtora Horizonte:</b> plano de ação crítico escalonado para diretoria (sem tratativa há 5 dias)</li>
+                <li>🟠 <b>Vale Verde:</b> ICI subiu 4 pontos no mês — condições inseguras em alta na britagem</li>
+                <li>🟡 <b>3 atestados</b> de ASO vencem nos próximos 15 dias</li>
+                <li>🟢 <b>AgroBrasil:</b> 214 dias sem acidente com afastamento 🎉</li>
+              </ul>
+            </div>
+          </div>
+        </section>
+
+        <!-- ===== GERENCIAL ===== -->
+        <section class="screen" id="screen-ger">
+          <div class="page-head"><div><h2>Dashboard Gerencial</h2><p id="ger-sub"></p></div></div>
+          <div class="stat-grid" id="ger-stats"></div>
+          <div class="grid2">
+            <div class="panel"><h3>Observações por tipo (mês)</h3><div id="chart-tipos"></div></div>
+            <div class="panel"><h3>Planos de ação por criticidade</h3><div class="tbl-wrap"><table class="tbl" id="tbl-ger-planos"></table></div></div>
+          </div>
+        </section>
+
+        <!-- ===== OPERACIONAL ===== -->
+        <section class="screen" id="screen-oper">
+          <div class="page-head"><div><h2>Dashboard Operacional</h2><p>Rotina do dia — supervisores e técnicos de segurança.</p></div>
+            <button class="btn btn-primary" onclick="nav('qr')">📱 Nova inspeção</button></div>
+          <div class="stat-grid" id="oper-stats"></div>
+          <div class="panel">
+            <h3>Ações vencendo hoje / atrasadas ⏰</h3>
+            <div class="tbl-wrap"><table class="tbl" id="tbl-oper-acoes"></table></div>
+          </div>
+          <div class="panel">
+            <h3>Últimas inspeções registradas</h3>
+            <div class="tbl-wrap"><table class="tbl" id="tbl-oper-insp"></table></div>
+          </div>
+        </section>
+
+        <!-- ===== QR / NOVA INSPEÇÃO ===== -->
+        <section class="screen" id="screen-qr">
+          <div class="page-head"><div><h2>Inspeção via QR Code</h2><p>No campo: aponte a câmera para o QR da área e o formulário abre já identificado.</p></div></div>
+          <div class="qr-stage">
+            <div class="panel qr-card">
+              <h3 style="justify-content:center;">📍 QR da área</h3>
+              <svg class="qr-svg" viewBox="0 0 21 21" id="qr-svg"></svg>
+              <p style="font-size:12.5px;color:var(--gray);margin-bottom:12px;">Área: <b>Britagem — Planta 2</b><br>Cliente: <b id="qr-cliente-nome">—</b></p>
+              <button class="btn btn-primary" onclick="toast('QR lido! Formulário aberto com área e contrato preenchidos. 📱')">Simular leitura do QR</button>
+            </div>
+            <div class="panel">
+              <h3>Formulário de observação</h3>
+              <label style="font-size:12.5px;font-weight:600;display:block;margin-bottom:8px;">Tipo de observação</label>
+              <div class="tipo-grid" id="tipo-grid"></div>
+              <div class="row2">
+                <div class="field"><label>Local / setor</label><input value="Britagem — Planta 2" ></div>
+                <div class="field"><label>Gravidade</label><select id="insp-grav"><option>Baixa</option><option>Média</option><option selected>Alta</option><option>Crítica</option></select></div>
+              </div>
+              <div class="field"><label>Descrição</label><textarea id="insp-desc">Colaborador operando a britadeira sem protetor auricular. Orientado no ato; EPI reposto.</textarea></div>
+              <div class="row2">
+                <div class="field"><label>Foto da evidência</label>
+                  <div class="upload-box" id="foto-box" onclick="fotoMock()">📷 Tirar foto / anexar<br><small>obrigatória para condição insegura</small></div>
+                </div>
+                <div class="field"><label>Localização (GPS automático)</label>
+                  <div class="gps-badge">📍 -16.6864, -49.2643 · precisão 4 m</div>
+                  <p style="font-size:11px;color:var(--gray);margin-top:8px;">Capturada automaticamente pelo dispositivo.</p>
+                </div>
+              </div>
+              <div class="field"><label>Assinatura digital do observador ✍️ <small style="color:var(--gray);font-weight:400;">(desenhe abaixo)</small></label>
+                <canvas class="sig-canvas" id="sig"></canvas>
+                <button class="btn btn-ghost btn-sm" style="margin-top:6px;" onclick="clearSig()">Limpar assinatura</button>
+              </div>
+              <button class="btn btn-primary btn-block" onclick="submitInspecao()">ENVIAR OBSERVAÇÃO</button>
+            </div>
+          </div>
+        </section>
+
+        <!-- ===== INSPEÇÕES ===== -->
+        <section class="screen" id="screen-inspecoes">
+          <div class="page-head"><div><h2>Inspeções registradas</h2><p id="insp-sub"></p></div>
+            <button class="btn btn-primary" onclick="nav('qr')">📱 Nova inspeção</button></div>
+          <div class="panel tbl-wrap"><table class="tbl" id="tbl-inspecoes"></table></div>
+        </section>
+
+        <!-- ===== PLANOS ===== -->
+        <section class="screen" id="screen-planos">
+          <div class="page-head"><div><h2>Planos de ação</h2><p>Abertos automaticamente pelo Power Automate conforme a matriz de criticidade.</p></div></div>
+          <div class="hint">⚡ <b>Escalonamento automático:</b> ação vencida sobe de nível — Supervisor → Coordenador → Gerente → Diretoria — com notificação por e-mail e WhatsApp em cada etapa.</div>
+          <div class="panel tbl-wrap"><table class="tbl" id="tbl-planos"></table></div>
+        </section>
+
+        <!-- ===== ATESTADOS ===== -->
+        <section class="screen" id="screen-atestados">
+          <div class="page-head"><div><h2>Atestados & exames médicos</h2><p>Controle de validade com alerta automático de vencimento.</p></div>
+            <button class="btn btn-primary" onclick="toast('Upload de atestado (mock) — OCR extrai dados e agenda o alerta. 🩺')">＋ Registrar atestado</button></div>
+          <div class="stat-grid" id="atest-stats"></div>
+          <div class="panel tbl-wrap"><table class="tbl" id="tbl-atestados"></table></div>
+        </section>
+
+        <!-- ===== DOCUMENTOS ===== -->
+        <section class="screen" id="screen-docs">
+          <div class="page-head"><div><h2>Geração automatizada de documentos</h2><p>Power Apps + templates Word — o documento sai pronto, sem retrabalho.</p></div></div>
+          <div class="doc-grid">
+            <div class="doc-card"><div class="i">🩺</div><h4>ASO</h4><p>Atestado de Saúde Ocupacional por funcionário e tipo de exame.</p><button class="btn btn-outline btn-sm" onclick="gerarDoc('ASO')">Gerar documento</button></div>
+            <div class="doc-card"><div class="i">🛡️</div><h4>PGR</h4><p>Programa de Gerenciamento de Riscos por cliente/contrato.</p><button class="btn btn-outline btn-sm" onclick="gerarDoc('PGR')">Gerar documento</button></div>
+            <div class="doc-card"><div class="i">👂</div><h4>PCA</h4><p>Programa de Conservação Auditiva com dados dos exames.</p><button class="btn btn-outline btn-sm" onclick="gerarDoc('PCA')">Gerar documento</button></div>
+            <div class="doc-card"><div class="i">🏭</div><h4>LTCAT</h4><p>Laudo Técnico das Condições Ambientais de Trabalho.</p><button class="btn btn-outline btn-sm" onclick="gerarDoc('LTCAT')">Gerar documento</button></div>
+            <div class="doc-card"><div class="i">📑</div><h4>PPP</h4><p>Perfil Profissiográfico Previdenciário automatizado.</p><button class="btn btn-outline btn-sm" onclick="gerarDoc('PPP')">Gerar documento</button></div>
+          </div>
+          <div class="panel">
+            <h3>Gerados recentemente</h3>
+            <div class="tbl-wrap"><table class="tbl" id="tbl-docs">
+              <tr><th>Documento</th><th>Referência</th><th>Cliente</th><th>Gerado em</th><th>Por</th><th></th></tr>
+              <tr><td><b>ASO — Admissional</b></td><td>Carlos Eduardo Nunes</td><td>Vale Verde Mineração</td><td>05/08/2026</td><td>Automático (admissão)</td><td><button class="btn btn-ghost btn-sm" onclick="toast('Download do .docx (mock)')">⬇ Word</button></td></tr>
+              <tr><td><b>PGR — Rev. 04</b></td><td>Contrato 8802</td><td>Construtora Horizonte</td><td>04/08/2026</td><td>Rafael Martini</td><td><button class="btn btn-ghost btn-sm" onclick="toast('Download do .docx (mock)')">⬇ Word</button></td></tr>
+              <tr><td><b>PPP</b></td><td>Marta Silveira (desligamento)</td><td>AgroBrasil Energia</td><td>01/08/2026</td><td>Automático (desligamento)</td><td><button class="btn btn-ghost btn-sm" onclick="toast('Download do .docx (mock)')">⬇ Word</button></td></tr>
+            </table></div>
+          </div>
+        </section>
+
+        <!-- ===== CARTEIRINHAS ===== -->
+        <section class="screen" id="screen-badges">
+          <div class="page-head"><div><h2>Carteirinhas de funcionários</h2><p>Geradas automaticamente com foto, cargo, contrato e validade.</p></div>
+            <button class="btn btn-primary" onclick="toast('Lote de carteirinhas enviado para impressão (mock) 🖨️')">🖨 Imprimir lote</button></div>
+          <div class="badge-grid" id="badge-grid"></div>
+        </section>
+
+        <!-- ===== INTEGRAÇÕES ===== -->
+        <section class="screen" id="screen-integr">
+          <div class="page-head"><div><h2>Integrações & Matriz de criticidade</h2><p>O motor da automação — tudo conectado à Power Platform.</p></div></div>
+          <div class="int-grid">
+            <div class="panel" style="margin:0;"><h3>📁 SharePoint / Dataverse</h3><p style="font-size:12px;color:var(--gray);margin-bottom:10px;">Listas de inspeções, planos e atestados por cliente.</p><span class="pill ok">● Conectado</span></div>
+            <div class="panel" style="margin:0;"><h3>⚡ Power Automate</h3><p style="font-size:12px;color:var(--gray);margin-bottom:10px;">4 fluxos ativos: plano de ação, notificação, escalonamento, vencimento de ASO.</p><span class="pill ok">● 4 fluxos ativos</span></div>
+            <div class="panel" style="margin:0;"><h3>📊 Power BI</h3><p style="font-size:12px;color:var(--gray);margin-bottom:10px;">3 workspaces: Executivo, Gerencial, Operacional. Refresh a cada 30 min.</p><span class="pill ok">● Sincronizado</span></div>
+            <div class="panel" style="margin:0;"><h3>💬 WhatsApp + E-mail</h3><p style="font-size:12px;color:var(--gray);margin-bottom:10px;">Notificações conforme matriz de criticidade.</p><span class="pill ok">● Ativo</span></div>
+          </div>
+          <div class="panel">
+            <h3>Matriz de criticidade × comunicação</h3>
+            <div class="tbl-wrap"><table class="tbl">
+              <tr><th>Criticidade</th><th>Prazo do plano</th><th>Notifica imediatamente</th><th>Escalona se vencido</th></tr>
+              <tr><td><span class="pill ok">Baixa</span></td><td>7 dias</td><td>Supervisor (e-mail)</td><td>Coordenador em +3 dias</td></tr>
+              <tr><td><span class="pill warn">Média</span></td><td>72 horas</td><td>Supervisor + Coordenador (e-mail)</td><td>Gerente em +48h</td></tr>
+              <tr><td><span class="pill orange">Alta</span></td><td>24 horas</td><td>Coordenador + Gerente (e-mail + WhatsApp)</td><td>Diretoria em +24h</td></tr>
+              <tr><td><span class="pill bad">Crítica</span></td><td>Imediato</td><td>Gerente + Diretoria (e-mail + WhatsApp)</td><td>Reunião extraordinária automática</td></tr>
+            </table></div>
+          </div>
+        </section>
+
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== MODAL AUTOMAÇÃO ===== -->
+<div class="modal-bg" id="modal-auto">
+  <div class="modal">
+    <h3>⚡ Power Automate em ação</h3>
+    <p style="font-size:12.5px;color:var(--gray);margin-bottom:12px;">Observação <b>Alta criticidade</b> registrada — o fluxo disparou automaticamente:</p>
+    <ul class="flow-steps" id="flow-steps">
+      <li><span class="ic">💾</span><div><b>Registro salvo no SharePoint/Dataverse</b><small>Lista: Inspeções · Contrato 4501</small></div></li>
+      <li><span class="ic">🎯</span><div><b>Plano de ação PA-2031 aberto automaticamente</b><small>Prazo: 24h · Responsável: supervisor da área</small></div></li>
+      <li><span class="ic">📊</span><div><b>Indicadores atualizados</b><small>ICI recalculado · dashboards Power BI</small></div></li>
+      <li><span class="ic">📧</span><div><b>E-mail enviado</b><small>Coordenador + Gerente (matriz: Alta)</small></div></li>
+      <li><span class="ic">💬</span><div><b>WhatsApp enviado</b><small>Grupo SSMA Vale Verde · com foto e GPS</small></div></li>
+    </ul>
+    <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:14px;">
+      <button class="btn btn-ghost" onclick="closeModals()">Fechar</button>
+      <button class="btn btn-primary" onclick="closeModals();nav('planos')">Ver plano de ação →</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* ============================================================
+   DADOS MOCK
+   ============================================================ */
+const U = id => `https://images.unsplash.com/${id}?auto=format&fit=crop&w=300&q=60`;
+const TIPOS = [
+  {nome:'Comportamento Seguro',   cor:'var(--green)',  bg:'var(--green-light)',  n:64},
+  {nome:'Comportamento Inseguro', cor:'var(--orange)', bg:'var(--orange-light)', n:23},
+  {nome:'Condição Insegura',      cor:'var(--red)',    bg:'var(--red-light)',    n:18},
+  {nome:'Melhoria Identificada',  cor:'var(--blue)',   bg:'var(--blue-light)',   n:15},
+  {nome:'Não Conformidade',       cor:'var(--purple)', bg:'var(--purple-light)', n:9},
+];
+const NIVEIS = ['Supervisor','Coordenador','Gerente','Diretoria'];
+
+const CLIENTES = [
+  {id:1, nome:'Vale Verde Mineração', contrato:'4501', ig:87, ics:91, ici:12, icsg:84, tf:2.1, tg:45,  insp:118, planosAb:9,  diasSem:96},
+  {id:2, nome:'Construtora Horizonte', contrato:'8802', ig:74, ics:79, ici:28, icsg:71, tf:5.8, tg:112, insp:86,  planosAb:14, diasSem:12},
+  {id:3, nome:'AgroBrasil Energia',    contrato:'1203', ig:92, ics:95, ici:8,  icsg:90, tf:0.9, tg:18,  insp:64,  planosAb:3,  diasSem:214},
+];
+
+const INSPECOES = [
+  {id:'IN-2044', data:'06/08 09:12', tipo:2, local:'Britagem — Planta 2',      clienteId:1, grav:'Alta',    obs:'Operação sem protetor auricular', foto:true,  status:'Plano aberto'},
+  {id:'IN-2043', data:'06/08 08:40', tipo:0, local:'Oficina de manutenção',     clienteId:1, grav:'—',       obs:'Uso correto de trava-quedas na altura', foto:true, status:'Registrada'},
+  {id:'IN-2042', data:'05/08 16:20', tipo:4, local:'Canteiro — Torre B',        clienteId:2, grav:'Crítica', obs:'Andaime sem laudo de liberação', foto:true,  status:'Escalonada'},
+  {id:'IN-2041', data:'05/08 14:05', tipo:3, local:'Refeitório central',        clienteId:3, grav:'Baixa',   obs:'Sugerido demarcar rota de fuga no piso', foto:false, status:'Plano aberto'},
+  {id:'IN-2040', data:'05/08 10:55', tipo:1, local:'Almoxarifado',              clienteId:2, grav:'Média',   obs:'Empilhamento manual acima do ombro', foto:true, status:'Plano aberto'},
+  {id:'IN-2039', data:'04/08 15:30', tipo:2, local:'Subestação elétrica',       clienteId:3, grav:'Alta',    obs:'Painel energizado com porta aberta', foto:true, status:'Concluída'},
+  {id:'IN-2038', data:'04/08 09:15', tipo:0, local:'Frente de lavra',           clienteId:1, grav:'—',       obs:'Checklist do caminhão feito corretamente', foto:false, status:'Registrada'},
+];
+
+const PLANOS = [
+  {id:'PA-2031', origem:'IN-2044', acao:'Repor protetores auriculares e reciclar DDS de ruído', clienteId:1, grav:'Alta',    resp:'Supervisor J. Amaral', prazo:'07/08', nivel:0, status:'No prazo'},
+  {id:'PA-2029', origem:'IN-2042', acao:'Interditar andaime e emitir laudo de liberação',       clienteId:2, grav:'Crítica', resp:'Ger. Obras P. Siqueira', prazo:'05/08', nivel:3, status:'Escalonado'},
+  {id:'PA-2028', origem:'IN-2040', acao:'Treinar equipe em movimentação manual de cargas',      clienteId:2, grav:'Média',   resp:'Coord. L. Barreto', prazo:'08/08', nivel:1, status:'No prazo'},
+  {id:'PA-2026', origem:'IN-2041', acao:'Demarcar rota de fuga no refeitório',                  clienteId:3, grav:'Baixa',   resp:'Supervisor M. Costa', prazo:'12/08', nivel:0, status:'No prazo'},
+  {id:'PA-2024', origem:'IN-2039', acao:'Travar painel e revisar bloqueio LOTO',                clienteId:3, grav:'Alta',    resp:'Coord. E. Ferraz', prazo:'05/08', nivel:0, status:'Concluído'},
+  {id:'PA-2021', origem:'IN-2035', acao:'Substituir extintores vencidos do galpão 3',           clienteId:1, grav:'Média',   resp:'Supervisor J. Amaral', prazo:'04/08', nivel:2, status:'Atrasado'},
+];
+
+const ATESTADOS = [
+  {func:'Carlos Eduardo Nunes', clienteId:1, tipo:'ASO Periódico',    emissao:'12/08/2025', venc:'12/08/2026', dias:6},
+  {func:'Marina Duarte',        clienteId:2, tipo:'ASO Mudança de função', emissao:'20/08/2025', venc:'20/08/2026', dias:14},
+  {func:'José Ribamar Filho',   clienteId:1, tipo:'Audiometria (PCA)', emissao:'28/07/2025', venc:'28/07/2026', dias:-9},
+  {func:'Paulo Vitor Sales',    clienteId:3, tipo:'ASO Periódico',    emissao:'02/10/2025', venc:'02/10/2026', dias:57},
+  {func:'Renata Borges',        clienteId:2, tipo:'Espirometria',     emissao:'15/09/2025', venc:'15/09/2026', dias:40},
+  {func:'Antônio Carlos Melo',  clienteId:3, tipo:'ASO Periódico',    emissao:'30/08/2025', venc:'30/08/2026', dias:24},
+];
+
+const FUNCIONARIOS = [
+  {nome:'Carlos Eduardo Nunes', cargo:'Operador de Britagem', mat:'VV-0341', clienteId:1, val:'12/08/2026', foto:U('photo-1507003211169-0a1dd7228f2d')},
+  {nome:'Marina Duarte',        cargo:'Téc. de Segurança',    mat:'CH-1120', clienteId:2, val:'20/08/2026', foto:U('photo-1494790108377-be9c29b29330')},
+  {nome:'José Ribamar Filho',   cargo:'Mecânico industrial',  mat:'VV-0298', clienteId:1, val:'28/07/2026', foto:U('photo-1500648767791-00dcc994a43e')},
+  {nome:'Renata Borges',        cargo:'Eng. de Obras',        mat:'CH-1054', clienteId:2, val:'15/09/2026', foto:U('photo-1580489944761-15a19d654956')},
+  {nome:'Paulo Vitor Sales',    cargo:'Eletricista NR-10',    mat:'AB-0512', clienteId:3, val:'02/10/2026', foto:U('photo-1560250097-0b93528c311a')},
+  {nome:'Ana Beatriz Fontes',   cargo:'Aux. Administrativo',  mat:'AB-0530', clienteId:3, val:'11/11/2026', foto:U('photo-1573496359142-b8d87734a5a2')},
+];
+
+/* ============================================================
+   ESTADO / HELPERS
+   ============================================================ */
+const $ = id => document.getElementById(id);
+let clienteSel = 'all', current = 'exec', tipoSel = 2;
+const fmt1 = v => v.toFixed(1).replace('.',',');
+const clientesAtivos = () => clienteSel==='all' ? CLIENTES : CLIENTES.filter(c=>c.id==clienteSel);
+const cliNome = id => CLIENTES.find(c=>c.id==id)?.nome || '—';
+const media = (arr,k) => arr.reduce((s,c)=>s+c[k],0)/arr.length;
+const gravPill = g => ({'Baixa':'ok','Média':'warn','Alta':'orange','Crítica':'bad','—':'gray'})[g]||'gray';
+const igColor = v => v>=85 ? 'var(--green)' : v>=75 ? 'var(--yellow)' : 'var(--red)';
+
+function login(){ $('view-login').classList.add('hide'); $('app').classList.remove('hide'); renderTop(); nav('exec'); toast('Bem-vindo! Dashboards sincronizados com o Power BI. 👋'); }
+function logout(){ $('app').classList.add('hide'); $('view-login').classList.remove('hide'); }
+
+function renderTop(){
+  $('sel-cliente').innerHTML = `<option value="all">🌐 Todos os clientes (consolidado)</option>` +
+    CLIENTES.map(c=>`<option value="${c.id}" ${clienteSel==c.id?'selected':''}>${c.nome} · Contrato ${c.contrato}</option>`).join('');
+}
+function setCliente(v){ clienteSel = v; renderScreen(current); toast(v==='all' ? 'Visão consolidada de todos os contratos.' : 'Filtrado: '+cliNome(+v)); }
+
+function nav(p){
+  current = p;
+  document.querySelectorAll('.content .screen').forEach(s=>s.classList.remove('active'));
+  $('screen-'+p).classList.add('active');
+  document.querySelectorAll('#side-nav button').forEach(b=>b.classList.toggle('on', b.dataset.nav===p));
+  renderScreen(p);
+  window.scrollTo({top:0});
+}
+function renderScreen(p){
+  ({exec:renderExec, ger:renderGer, oper:renderOper, qr:renderQr, inspecoes:renderInsp,
+    planos:renderPlanos, atestados:renderAtest, docs:()=>{}, badges:renderBadges, integr:()=>{}})[p]();
+}
+
+/* ============================================================
+   EXECUTIVO
+   ============================================================ */
+function gaugeHtml(v){
+  const ang = v/100*180, rad = a => (180-a)*Math.PI/180;
+  const x = 100+80*Math.cos(rad(ang)), y = 95-80*Math.sin(rad(ang));
+  const large = ang>90?1:0;
+  return `<svg viewBox="0 0 200 110" style="width:min(300px,100%);">
+    <path d="M20,95 A80,80 0 0 1 180,95" fill="none" stroke="#e8ecf1" stroke-width="17" stroke-linecap="round"/>
+    <path d="M20,95 A80,80 0 ${large} 1 ${x.toFixed(1)},${y.toFixed(1)}" fill="none" stroke="${igColor(v)}" stroke-width="17" stroke-linecap="round"/>
+    <text x="100" y="82" text-anchor="middle" font-size="30" font-weight="800" fill="${igColor(v)}">${Math.round(v)}</text>
+    <text x="100" y="101" text-anchor="middle" font-size="9.5" fill="#64748b" font-weight="700">ÍNDICE GLOBAL SSMA (0–100)</text>
+  </svg>`;
+}
+function renderExec(){
+  const cs = clientesAtivos();
+  const ig = media(cs,'ig');
+  $('gauge-exec').innerHTML = gaugeHtml(ig);
+  $('kpi-exec').innerHTML = `
+    <div class="kpi"><div class="v" style="color:var(--green)">${fmt1(media(cs,'ics'))}</div><div class="l">ICS · Comportamento Seguro</div><div class="d" style="color:var(--green)">▲ +2,1 no mês</div></div>
+    <div class="kpi"><div class="v" style="color:var(--red)">${fmt1(media(cs,'ici'))}</div><div class="l">ICI · Condições Inseguras</div><div class="d" style="color:var(--red)">▲ +1,4 (atenção)</div></div>
+    <div class="kpi"><div class="v" style="color:var(--blue)">${fmt1(media(cs,'icsg'))}</div><div class="l">ICSG · Cultura de Segurança</div><div class="d" style="color:var(--green)">▲ +0,8</div></div>
+    <div class="kpi"><div class="v">${fmt1(media(cs,'tf'))}</div><div class="l">Taxa de Frequência</div><div class="d" style="color:var(--green)">▼ melhor que 2025</div></div>
+    <div class="kpi"><div class="v">${fmt1(media(cs,'tg'))}</div><div class="l">Taxa de Gravidade</div><div class="d" style="color:var(--gray)">estável</div></div>`;
+  $('tbl-exec-clientes').innerHTML = `<tr><th>Cliente / contrato</th><th>Índice Global</th><th>ICS</th><th>ICI</th><th>TF</th><th>Planos abertos</th><th>Dias sem acidente</th><th>Status</th></tr>` +
+    CLIENTES.map(c=>`<tr>
+      <td><b>${c.nome}</b><br><small style="color:var(--gray)">Contrato ${c.contrato}</small></td>
+      <td><b style="color:${igColor(c.ig)};font-size:15px;">${c.ig}</b></td>
+      <td class="c">${c.ics}</td><td class="c">${c.ici}</td><td class="c">${fmt1(c.tf)}</td>
+      <td class="c">${c.planosAb}</td><td class="c"><b>${c.diasSem}</b> 🏆</td>
+      <td>${c.ig>=85?'<span class="pill ok">Saudável</span>':c.ig>=75?'<span class="pill warn">Atenção</span>':'<span class="pill bad">Crítico</span>'}</td></tr>`).join('');
+  const serie = [79,81,80,83,84,Math.round(ig)];
+  const meses = ['Mar','Abr','Mai','Jun','Jul','Ago'];
+  const pts = serie.map((v,i)=>`${40+i*72},${150-(v-70)*4.5}`).join(' ');
+  $('chart-ig').innerHTML = `<svg viewBox="0 0 440 170" style="width:100%;height:auto">
+    <line x1="30" y1="150" x2="420" y2="150" stroke="#e8ecf1"/><line x1="30" y1="83" x2="420" y2="83" stroke="#e8ecf1" stroke-dasharray="4"/>
+    <text x="426" y="87" font-size="9" fill="#64748b">meta 85</text>
+    <polyline points="${pts}" fill="none" stroke="var(--primary)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+    ${serie.map((v,i)=>`<circle cx="${40+i*72}" cy="${150-(v-70)*4.5}" r="5" fill="var(--primary)"/>
+      <text x="${40+i*72}" y="${140-(v-70)*4.5}" text-anchor="middle" font-size="11" font-weight="700" fill="#0e1a2b">${v}</text>
+      <text x="${40+i*72}" y="166" text-anchor="middle" font-size="10.5" fill="#64748b">${meses[i]}</text>`).join('')}
+  </svg>`;
+}
+
+/* ============================================================
+   GERENCIAL / OPERACIONAL
+   ============================================================ */
+function renderGer(){
+  const cs = clientesAtivos();
+  $('ger-sub').textContent = clienteSel==='all' ? 'Todos os clientes — troque no seletor acima para ver um contrato específico.' : `${cliNome(+clienteSel)} · Contrato ${cs[0].contrato}`;
+  $('ger-stats').innerHTML = `
+    <div class="stat"><div class="lbl">Inspeções no mês</div><div class="num">${cs.reduce((s,c)=>s+c.insp,0)}</div><div class="sub" style="color:var(--green)">▲ 12% vs julho</div></div>
+    <div class="stat"><div class="lbl">Planos abertos</div><div class="num">${cs.reduce((s,c)=>s+c.planosAb,0)}</div><div class="sub" style="color:var(--orange)">${PLANOS.filter(p=>p.status==='Atrasado'||p.status==='Escalonado').length} escalonados/atrasados</div></div>
+    <div class="stat"><div class="lbl">ICS médio</div><div class="num" style="color:var(--green)">${fmt1(media(cs,'ics'))}</div><div class="sub" style="color:var(--gray)">meta ≥ 90</div></div>
+    <div class="stat"><div class="lbl">ICI médio</div><div class="num" style="color:var(--red)">${fmt1(media(cs,'ici'))}</div><div class="sub" style="color:var(--gray)">meta ≤ 10</div></div>`;
+  const max = Math.max(...TIPOS.map(t=>t.n));
+  $('chart-tipos').innerHTML = TIPOS.map(t=>`
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
+      <div style="width:170px;font-size:11.5px;font-weight:700;">${t.nome}</div>
+      <div style="flex:1;height:16px;border-radius:9px;background:#eef1f5;overflow:hidden;">
+        <div style="width:${t.n/max*100}%;height:100%;border-radius:9px;background:${t.cor};"></div>
+      </div><b style="font-size:12.5px;min-width:26px;text-align:right;">${t.n}</b>
+    </div>`).join('');
+  const byGrav = ['Crítica','Alta','Média','Baixa'].map(g=>({g, ps:PLANOS.filter(p=>p.grav===g && (clienteSel==='all'||p.clienteId==clienteSel))}));
+  $('tbl-ger-planos').innerHTML = `<tr><th>Criticidade</th><th>Abertos</th><th>No prazo</th><th>Escalonados</th></tr>` +
+    byGrav.map(x=>`<tr><td><span class="pill ${gravPill(x.g)}">${x.g}</span></td>
+      <td class="c">${x.ps.length}</td>
+      <td class="c">${x.ps.filter(p=>p.status==='No prazo'||p.status==='Concluído').length}</td>
+      <td class="c"><b style="color:${x.ps.filter(p=>p.nivel>0&&p.status!=='Concluído').length?'var(--red)':'var(--gray)'}">${x.ps.filter(p=>p.nivel>0&&p.status!=='Concluído').length}</b></td></tr>`).join('');
+}
+
+function renderOper(){
+  const insp = INSPECOES.filter(i=>clienteSel==='all'||i.clienteId==clienteSel);
+  $('oper-stats').innerHTML = `
+    <div class="stat"><div class="lbl">Inspeções hoje</div><div class="num">${insp.filter(i=>i.data.startsWith('06/08')).length}</div><div class="sub" style="color:var(--gray)">meta diária: 6</div></div>
+    <div class="stat"><div class="lbl">Ações vencendo hoje</div><div class="num" style="color:var(--orange)">2</div><div class="sub" style="color:var(--orange)">priorize! ⏰</div></div>
+    <div class="stat"><div class="lbl">Atrasadas</div><div class="num" style="color:var(--red)">${PLANOS.filter(p=>p.status==='Atrasado'||p.status==='Escalonado').length}</div><div class="sub" style="color:var(--red)">escalonamento ativo</div></div>
+    <div class="stat"><div class="lbl">DDS registrados hoje</div><div class="num">3</div><div class="sub" style="color:var(--green)">✓ todas as frentes</div></div>`;
+  const urgentes = PLANOS.filter(p=>p.status!=='Concluído' && (p.status==='Atrasado'||p.status==='Escalonado'||p.prazo==='07/08'));
+  $('tbl-oper-acoes').innerHTML = `<tr><th>Plano</th><th>Ação</th><th>Criticidade</th><th>Prazo</th><th>Status</th><th></th></tr>` +
+    urgentes.map(p=>`<tr><td><b>${p.id}</b></td><td style="max-width:280px;">${p.acao}</td>
+      <td><span class="pill ${gravPill(p.grav)}">${p.grav}</span></td><td>${p.prazo}</td>
+      <td>${p.status==='No prazo'?'<span class="pill warn">Vence hoje/amanhã</span>':'<span class="pill bad">'+p.status+'</span>'}</td>
+      <td><button class="btn btn-outline btn-sm" onclick="toast('Tratativa registrada em '+'${p.id}'+' (mock)')">Tratar</button></td></tr>`).join('');
+  $('tbl-oper-insp').innerHTML = `<tr><th>ID</th><th>Data</th><th>Tipo</th><th>Local</th><th>Status</th></tr>` +
+    insp.slice(0,5).map(i=>{
+      const t = TIPOS[i.tipo];
+      return `<tr><td><b>${i.id}</b></td><td>${i.data}</td>
+        <td><span class="pill" style="background:${t.bg};color:${t.cor}">${t.nome}</span></td>
+        <td>${i.local}</td><td><span class="pill ${i.status==='Escalonada'?'bad':i.status==='Concluída'?'ok':'info'}">${i.status}</span></td></tr>`;
+    }).join('');
+}
+
+/* ============================================================
+   QR / FORM
+   ============================================================ */
+function renderQr(){
+  $('qr-cliente-nome').textContent = clienteSel==='all' ? 'Vale Verde Mineração · Contrato 4501' : cliNome(+clienteSel);
+  $('tipo-grid').innerHTML = TIPOS.map((t,i)=>`
+    <div class="tipo-opt ${i===tipoSel?'sel':''}" style="--tc:${t.cor};--tb:${t.bg}" onclick="tipoSel=${i};renderQr()">
+      <span class="dotc"></span>${t.nome}</div>`).join('');
+  // QR fake
+  let cells = '';
+  for(let r=0;r<21;r++)for(let c=0;c<21;c++){
+    const corner = (r<7&&c<7)||(r<7&&c>13)||(r>13&&c<7);
+    const on = corner ? ((r%6===0||c%6===0||(r>1&&r<5&&c>1&&c<5)) && !(r===1&&c===1)) : ((r*7+c*13+r*c)%5<2);
+    if(on) cells += `<rect x="${c}" y="${r}" width="1" height="1" fill="#0e1a2b"/>`;
+  }
+  $('qr-svg').innerHTML = cells;
+  initSig();
+}
+let fotoOk = false;
+function fotoMock(){ fotoOk = true; $('foto-box').innerHTML = '✅ 1 foto anexada<br><small>britagem_epi.jpg · 2,4 MB</small>'; toast('Foto capturada e comprimida. 📷'); }
+
+/* assinatura digital */
+let sigCtx, sigOn = false, sigDrawn = false;
+function initSig(){
+  const c = $('sig');
+  c.width = c.offsetWidth; c.height = 110;
+  sigCtx = c.getContext('2d');
+  sigCtx.lineWidth = 2.2; sigCtx.lineCap = 'round'; sigCtx.strokeStyle = '#0e1a2b';
+  const pos = e => { const r = c.getBoundingClientRect(); const p = e.touches?e.touches[0]:e; return [p.clientX-r.left, p.clientY-r.top]; };
+  c.onmousedown = c.ontouchstart = e => { sigOn = true; sigDrawn = true; const [x,y]=pos(e); sigCtx.beginPath(); sigCtx.moveTo(x,y); e.preventDefault(); };
+  c.onmousemove = c.ontouchmove = e => { if(!sigOn) return; const [x,y]=pos(e); sigCtx.lineTo(x,y); sigCtx.stroke(); e.preventDefault(); };
+  c.onmouseup = c.onmouseleave = c.ontouchend = () => sigOn = false;
+}
+function clearSig(){ sigDrawn = false; sigCtx.clearRect(0,0,$('sig').width,$('sig').height); }
+
+function submitInspecao(){
+  if(!sigDrawn){ toast('✍️ Assine no campo de assinatura antes de enviar.'); return; }
+  const grav = $('insp-grav').value;
+  INSPECOES.unshift({id:'IN-2045', data:'06/08 '+new Date().toString().slice(16,21) || '06/08 10:30', tipo:tipoSel, local:'Britagem — Planta 2', clienteId:1, grav:TIPOS[tipoSel].nome.includes('Seguro')&&tipoSel===0?'—':grav, obs:$('insp-desc').value.slice(0,60), foto:fotoOk, status:(grav==='Alta'||grav==='Crítica')?'Plano aberto':'Registrada'});
+  if(grav==='Alta'||grav==='Crítica'){
+    openModal('modal-auto');
+    document.querySelectorAll('#flow-steps li').forEach((li,i)=>{ li.classList.remove('done'); setTimeout(()=>li.classList.add('done'), 500+i*650); });
+  } else {
+    toast('Observação registrada no SharePoint! Indicadores atualizados. ✅');
+    nav('inspecoes');
+  }
+}
+
+/* ============================================================
+   INSPEÇÕES / PLANOS
+   ============================================================ */
+function renderInsp(){
+  const list = INSPECOES.filter(i=>clienteSel==='all'||i.clienteId==clienteSel);
+  $('insp-sub').textContent = `${list.length} registros · ${clienteSel==='all'?'todos os clientes':cliNome(+clienteSel)}`;
+  $('tbl-inspecoes').innerHTML = `<tr><th>ID</th><th>Data</th><th>Tipo de observação</th><th>Local</th><th>Cliente</th><th>Gravidade</th><th>Foto</th><th>Status</th></tr>` +
+    list.map(i=>{
+      const t = TIPOS[i.tipo];
+      return `<tr><td><b>${i.id}</b></td><td>${i.data}</td>
+        <td><span class="pill" style="background:${t.bg};color:${t.cor}">${t.nome}</span><br><small style="color:var(--gray)">${i.obs}</small></td>
+        <td>${i.local}</td><td>${cliNome(i.clienteId)}</td>
+        <td><span class="pill ${gravPill(i.grav)}">${i.grav}</span></td>
+        <td class="c">${i.foto?'📷':'—'}</td>
+        <td><span class="pill ${i.status==='Escalonada'?'bad':i.status==='Concluída'?'ok':'info'}">${i.status}</span></td></tr>`;
+    }).join('');
+}
+
+function renderPlanos(){
+  const list = PLANOS.filter(p=>clienteSel==='all'||p.clienteId==clienteSel);
+  $('tbl-planos').innerHTML = `<tr><th>Plano</th><th>Ação</th><th>Cliente</th><th>Criticidade</th><th>Responsável</th><th>Prazo</th><th>Escalonamento</th><th>Status</th></tr>` +
+    list.map(p=>{
+      const chain = NIVEIS.map((n,i)=>`<span class="${i<=p.nivel&&p.status!=='Concluído'&&(p.nivel>0||i===0)?(i<=p.nivel&&p.nivel>0?'done':''):''}">${n}</span>`).join('<i>→</i>');
+      return `<tr><td><b>${p.id}</b><br><small style="color:var(--gray)">de ${p.origem}</small></td>
+        <td style="max-width:250px;">${p.acao}</td><td>${cliNome(p.clienteId)}</td>
+        <td><span class="pill ${gravPill(p.grav)}">${p.grav}</span></td>
+        <td>${p.resp}</td><td>${p.prazo}</td>
+        <td><div class="esc-chain">${chain}</div></td>
+        <td>${p.status==='Concluído'?'<span class="pill ok">✓ Concluído</span>':p.status==='No prazo'?'<span class="pill info">No prazo</span>':'<span class="pill bad">'+p.status+' ⚡</span>'}</td></tr>`;
+    }).join('');
+}
+
+/* ============================================================
+   ATESTADOS / BADGES / DOCS
+   ============================================================ */
+function renderAtest(){
+  const list = ATESTADOS.filter(a=>clienteSel==='all'||a.clienteId==clienteSel);
+  const vencidos = list.filter(a=>a.dias<0).length, vencendo = list.filter(a=>a.dias>=0&&a.dias<=15).length;
+  $('atest-stats').innerHTML = `
+    <div class="stat"><div class="lbl">Exames controlados</div><div class="num">${list.length}</div></div>
+    <div class="stat"><div class="lbl">Vencidos</div><div class="num" style="color:var(--red)">${vencidos}</div><div class="sub" style="color:var(--red)">bloqueia acesso à área!</div></div>
+    <div class="stat"><div class="lbl">Vencem em 15 dias</div><div class="num" style="color:var(--orange)">${vencendo}</div><div class="sub" style="color:var(--orange)">alerta enviado ⚡</div></div>
+    <div class="stat"><div class="lbl">Em dia</div><div class="num" style="color:var(--green)">${list.length-vencidos-vencendo}</div></div>`;
+  $('tbl-atestados').innerHTML = `<tr><th>Funcionário</th><th>Cliente</th><th>Exame</th><th>Emissão</th><th>Vencimento</th><th>Situação</th><th></th></tr>` +
+    list.sort((a,b)=>a.dias-b.dias).map(a=>`<tr>
+      <td><b>${a.func}</b></td><td>${cliNome(a.clienteId)}</td><td>${a.tipo}</td>
+      <td>${a.emissao}</td><td>${a.venc}</td>
+      <td>${a.dias<0?`<span class="pill bad">Vencido há ${-a.dias} dias</span>`:a.dias<=15?`<span class="pill orange">Vence em ${a.dias} dias</span>`:`<span class="pill ok">Válido (${a.dias} dias)</span>`}</td>
+      <td><button class="btn btn-outline btn-sm" onclick="toast('Exame agendado + e-mail ao funcionário e ao RH (mock) 📅')">Agendar renovação</button></td></tr>`).join('');
+}
+
+function renderBadges(){
+  const list = FUNCIONARIOS.filter(f=>clienteSel==='all'||f.clienteId==clienteSel);
+  let qr = '';
+  for(let r=0;r<9;r++)for(let c=0;c<9;c++) if((r*5+c*3+r*c)%4<2) qr += `<rect x="${c}" y="${r}" width="1" height="1" fill="#0e1a2b"/>`;
+  $('badge-grid').innerHTML = list.map(f=>`
+    <div class="badge-card">
+      <div class="badge-top"><span>SSMA 360°</span><span>${cliNome(f.clienteId).toUpperCase()}</span></div>
+      <div class="badge-body">
+        <div class="badge-photo" style="background-image:url('${f.foto}')"></div>
+        <div class="badge-info">
+          <div class="n">${f.nome}</div>
+          <div class="c">${f.cargo}</div>
+          <div class="c">Matrícula ${f.mat}</div>
+        </div>
+      </div>
+      <div class="badge-foot">
+        <div>ASO válido até<br><b style="color:#fff;">${f.val}</b></div>
+        <svg class="badge-qr" viewBox="0 0 9 9">${qr}</svg>
+      </div>
+    </div>`).join('');
+}
+
+function gerarDoc(tipo){
+  toast(`${tipo} gerado via template Word com dados do Dataverse! ⬇ ${tipo.toLowerCase()}_2026.docx (mock)`);
+}
+
+/* ============================================================
+   MODAIS / TOAST
+   ============================================================ */
+function openModal(id){ $(id).classList.add('on'); }
+function closeModals(){ document.querySelectorAll('.modal-bg').forEach(m=>m.classList.remove('on')); }
+document.querySelectorAll('.modal-bg').forEach(m=>m.addEventListener('click', ev=>{ if(ev.target===m) closeModals(); }));
+function toast(msg){
+  const t=$('toast'); t.textContent=msg; t.classList.add('show');
+  clearTimeout(t._h); t._h=setTimeout(()=>t.classList.remove('show'),3400);
+}
+</script>
+</body>
+</html>

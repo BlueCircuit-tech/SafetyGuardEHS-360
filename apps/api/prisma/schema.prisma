@@ -1,0 +1,125 @@
+// SafetyGuard EHS 360 — modelo de dados
+// Etapa 1 — Cadastro da Empresa
+//   1.1 Empresa de Consultoria (matriz do sistema)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/// Conselho / orgao de registro do responsavel tecnico.
+enum TipoRegistroRt {
+  CREA
+  CRM
+  CREFITO
+  COREN
+  CRQ
+  MTE
+  OUTRO
+}
+
+enum RegimeTributario {
+  SIMPLES_NACIONAL
+  LUCRO_PRESUMIDO
+  LUCRO_REAL
+  MEI
+}
+
+enum AcaoAuditoria {
+  CRIACAO
+  ATUALIZACAO
+  EXCLUSAO
+}
+
+/// Empresa de consultoria — matriz do sistema.
+///
+/// Primeiro cadastro da plataforma. Alimenta o cabecalho dos relatorios, a
+/// assinatura dos e-mails, o cabecalho das mensagens de WhatsApp e o rodape
+/// dos laudos e auditorias. Existe um unico registro, garantido pela coluna
+/// `chaveMatriz`.
+model EmpresaConsultoria {
+  id String @id @default(uuid())
+
+  /// Trava de unicidade: garante uma unica matriz por instalacao.
+  chaveMatriz String @unique @default("MATRIZ")
+
+  // --- Identificacao ------------------------------------------------------
+  razaoSocial        String            @db.VarChar(150)
+  nomeFantasia       String            @db.VarChar(120)
+  /// Somente digitos/letras, sem mascara. Aceita CNPJ alfanumerico (2026+).
+  cnpj               String            @unique @db.VarChar(14)
+  inscricaoEstadual  String?           @db.VarChar(20)
+  inscricaoMunicipal String?           @db.VarChar(20)
+  /// Subclasse CNAE com 7 digitos, sem mascara.
+  cnaePrincipal      String?           @db.VarChar(7)
+  naturezaJuridica   String?           @db.VarChar(120)
+  regimeTributario   RegimeTributario?
+  dataFundacao       DateTime?         @db.Date
+
+  // --- Contato institucional ---------------------------------------------
+  email           String  @db.VarChar(150)
+  emailFinanceiro String? @db.VarChar(150)
+  /// Somente digitos, com DDD.
+  telefone        String  @db.VarChar(11)
+  whatsapp        String? @db.VarChar(11)
+  site            String? @db.VarChar(150)
+
+  // --- Endereco -----------------------------------------------------------
+  cep         String  @db.VarChar(8)
+  logradouro  String  @db.VarChar(150)
+  numero      String  @db.VarChar(20)
+  complemento String? @db.VarChar(80)
+  bairro      String  @db.VarChar(80)
+  cidade      String  @db.VarChar(80)
+  uf          String  @db.Char(2)
+
+  // --- Responsavel tecnico (assina laudos e auditorias) -------------------
+  responsavelTecnicoNome          String         @db.VarChar(120)
+  responsavelTecnicoCargo         String?        @db.VarChar(80)
+  responsavelTecnicoTipoRegistro  TipoRegistroRt
+  responsavelTecnicoRegistro      String         @db.VarChar(40)
+  responsavelTecnicoUfRegistro    String?        @db.Char(2)
+  responsavelTecnicoEmail         String?        @db.VarChar(150)
+  responsavelTecnicoTelefone      String?        @db.VarChar(11)
+
+  // --- Identidade visual e textos institucionais --------------------------
+  logoUrl           String? @db.VarChar(300)
+  corPrimaria       String  @default("#059669") @db.VarChar(7)
+  corSecundaria     String  @default("#0e1a2b") @db.VarChar(7)
+  /// Assinatura aplicada ao rodape dos e-mails enviados pela plataforma.
+  assinaturaEmail   String? @db.VarChar(500)
+  /// Texto fixo do rodape de laudos, relatorios e auditorias.
+  rodapeRelatorio   String? @db.VarChar(500)
+  /// Cabecalho aplicado as notificacoes de WhatsApp.
+  cabecalhoWhatsapp String? @db.VarChar(160)
+
+  // --- Configuracao -------------------------------------------------------
+  timezone String  @default("America/Sao_Paulo") @db.VarChar(60)
+  ativa    Boolean @default(true)
+
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  @@map("empresa_consultoria")
+}
+
+/// Trilha de auditoria — obrigatoria em sistemas de SSMA para provar
+/// quem alterou o que e quando.
+model RegistroAuditoria {
+  id         String        @id @default(uuid())
+  entidade   String        @db.VarChar(60)
+  entidadeId String        @db.VarChar(60)
+  acao       AcaoAuditoria
+  /// Diferenca aplicada: { campo: { de, para } }.
+  alteracoes Json?
+  autor      String?       @db.VarChar(150)
+  ip         String?       @db.VarChar(60)
+  criadoEm   DateTime      @default(now())
+
+  @@index([entidade, entidadeId, criadoEm])
+  @@map("registro_auditoria")
+}
