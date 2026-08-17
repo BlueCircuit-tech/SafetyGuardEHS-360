@@ -1,26 +1,31 @@
-import type { ReactNode } from 'react';
+import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { APP_NOME } from '@safetyguard/shared';
 
 /**
- * Roteiro de implantacao. A Etapa 1 e a unica navegavel por enquanto — as
- * demais ficam visiveis para dar contexto de onde o cadastro se encaixa.
+ * Roteiro de implantacao. Cada etapa liberada vira link; as futuras ficam
+ * visiveis para dar contexto de onde o cadastro atual se encaixa.
  */
 const ETAPAS = [
-  { id: '1.1', titulo: 'Empresa de Consultoria', descricao: 'Matriz do sistema', estado: 'ativa' },
-  { id: '1.2', titulo: 'Clientes / Contratos', descricao: 'Empresas atendidas', estado: 'futura' },
-  { id: '1.3', titulo: 'Unidades e Areas', descricao: 'Locais com QR Code', estado: 'futura' },
-  { id: '2', titulo: 'Pessoas e Acessos', descricao: 'Usuarios, perfis e funcionarios', estado: 'futura' },
-  { id: '3', titulo: 'Inspecoes e Planos', descricao: 'Campo, criticidade e escalonamento', estado: 'futura' },
-  { id: '4', titulo: 'Saude e Documentos', descricao: 'ASO, PGR, PCA, LTCAT, PPP', estado: 'futura' },
-  { id: '5', titulo: 'Dashboards', descricao: 'Executivo, gerencial e operacional', estado: 'futura' },
+  { id: '1.1', titulo: 'Empresa de Consultoria', descricao: 'Matriz do sistema', rota: '/empresa' },
+  { id: '2', titulo: 'Clientes / Contratantes', descricao: 'Empresas atendidas', rota: '/clientes' },
+  { id: '3', titulo: 'Empresas Contratadas', descricao: 'Terceiros e ranking SSMA', rota: '/terceiros' },
+  { id: '4', titulo: 'Unidades e Areas', descricao: 'Locais com QR Code', rota: null },
+  { id: '5', titulo: 'Pessoas e Acessos', descricao: 'Usuarios, perfis e funcionarios', rota: null },
+  { id: '6', titulo: 'Inspecoes e Planos', descricao: 'Campo, criticidade e escalonamento', rota: null },
+  { id: '7', titulo: 'Saude e Documentos', descricao: 'ASO, PGR, PCA, LTCAT, PPP', rota: null },
+  { id: '8', titulo: 'Dashboards', descricao: 'Executivo, gerencial e operacional', rota: null },
 ] as const;
 
-interface LayoutProps {
-  usuario?: string;
-  children: ReactNode;
-}
+const TITULOS: Array<{ prefixo: string; etapa: string; titulo: string }> = [
+  { prefixo: '/empresa', etapa: 'Etapa 1.1', titulo: 'Empresa de Consultoria — matriz do sistema' },
+  { prefixo: '/clientes', etapa: 'Etapa 2', titulo: 'Clientes / Contratantes' },
+  { prefixo: '/terceiros', etapa: 'Etapa 3', titulo: 'Empresas Contratadas / Terceiros' },
+];
 
-export function Layout({ usuario = 'Console Web', children }: LayoutProps) {
+export function Layout({ usuario = 'Console Web' }: { usuario?: string }) {
+  const { pathname } = useLocation();
+  const atual = TITULOS.find((item) => pathname.startsWith(item.prefixo)) ?? TITULOS[0]!;
+
   const iniciais = usuario
     .split(' ')
     .slice(0, 2)
@@ -42,20 +47,30 @@ export function Layout({ usuario = 'Console Web', children }: LayoutProps) {
         </div>
 
         <nav aria-label="Etapas de implantacao">
-          <div className="sec">Etapa 1 — Cadastro base</div>
-          {ETAPAS.map((etapa) => (
-            <div
-              key={etapa.id}
-              className={`etapa-item ${etapa.estado === 'ativa' ? 'ativa' : 'futura'}`}
-              aria-current={etapa.estado === 'ativa' ? 'step' : undefined}
-            >
-              <span aria-hidden="true">{etapa.estado === 'ativa' ? '●' : '○'}</span>
-              <span>
-                {etapa.id} {etapa.titulo}
-                <small>{etapa.descricao}</small>
-              </span>
-            </div>
-          ))}
+          <div className="sec">Cadastro base</div>
+          {ETAPAS.map((etapa) =>
+            etapa.rota ? (
+              <NavLink
+                key={etapa.id}
+                to={etapa.rota}
+                className={({ isActive }) => `etapa-item ${isActive ? 'ativa' : ''}`}
+              >
+                <span aria-hidden="true">●</span>
+                <span>
+                  {etapa.id} {etapa.titulo}
+                  <small>{etapa.descricao}</small>
+                </span>
+              </NavLink>
+            ) : (
+              <div key={etapa.id} className="etapa-item futura">
+                <span aria-hidden="true">○</span>
+                <span>
+                  {etapa.id} {etapa.titulo}
+                  <small>{etapa.descricao}</small>
+                </span>
+              </div>
+            ),
+          )}
         </nav>
 
         <div className="foot">
@@ -67,8 +82,8 @@ export function Layout({ usuario = 'Console Web', children }: LayoutProps) {
 
       <div className="main">
         <div className="topbar">
-          <span className="lbl">Etapa 1.1</span>
-          <strong style={{ fontSize: 14 }}>Empresa de Consultoria — matriz do sistema</strong>
+          <span className="lbl">{atual.etapa}</span>
+          <strong style={{ fontSize: 14 }}>{atual.titulo}</strong>
           <div className="user">
             <div>
               <div>{usuario}</div>
@@ -82,7 +97,9 @@ export function Layout({ usuario = 'Console Web', children }: LayoutProps) {
           </div>
         </div>
 
-        <div className="content">{children}</div>
+        <div className="content">
+          <Outlet />
+        </div>
       </div>
     </div>
   );

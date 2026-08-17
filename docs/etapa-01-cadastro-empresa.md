@@ -118,13 +118,15 @@ Profissional que assina laudos, programas e relatórios de auditoria. A linha
 ```
 1.1 Empresa de Consultoria  (matriz — este documento)
       │
-      ├── 1.2 Clientes / Contratos      ← cada cliente pertence à matriz
-      │        └── 1.3 Unidades e Áreas ← QR Code de inspeção por área
+      ├── 2. Clientes / Contratantes     ← cada cliente pertence à matriz
+      │        ├── 3. Terceiros           ← quem atua dentro da operação
+      │        └── 4. Unidades e Áreas    ← QR Code de inspeção por área
       │
-      ├── 2. Pessoas e acessos          ← usuários, perfis, funcionários
-      ├── 3. Inspeções e planos de ação ← matriz de criticidade e escalonamento
-      ├── 4. Saúde e documentos         ← ASO, PGR, PCA, LTCAT, PPP
-      └── 5. Dashboards                 ← executivo, gerencial, operacional
+      ├── 5. Pessoas e acessos            ← usuários, perfis, funcionários
+      ├── 6. Inspeções e planos de ação   ← matriz de criticidade e escalonamento
+      ├── 7. Saúde e documentos           ← ASO, PGR, PCA, LTCAT, PPP
+      └── 8. Dashboards                   ← executivo, gerencial, operacional
 ```
 
-Todo documento gerado nas etapas 3 e 4 usa o cabeçalho e o rodapé definidos aqui.
+Todo documento gerado nas etapas 6 e 7 usa o cabeçalho e o rodapé definidos aqui.
+Campos e regras dos clientes: [`etapa-02-clientes.md`](etapa-02-clientes.md).

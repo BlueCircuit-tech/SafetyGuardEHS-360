@@ -35,6 +35,36 @@ enum AcaoAuditoria {
   EXCLUSAO
 }
 
+enum PorteEmpresa {
+  MEI
+  ME
+  EPP
+  MEDIO
+  GRANDE
+}
+
+enum SituacaoContrato {
+  ATIVO
+  SUSPENSO
+  ENCERRADO
+}
+
+/// Situacao do terceiro na operacao do cliente.
+/// BLOQUEADO impede a liberacao de acesso enquanto houver pendencia.
+enum SituacaoTerceiro {
+  ATIVO
+  SUSPENSO
+  BLOQUEADO
+  ENCERRADO
+}
+
+enum TipoVinculoTerceiro {
+  CONTRATO
+  ORDEM_SERVICO
+  OBRA
+  SERVICO_EVENTUAL
+}
+
 /// Empresa de consultoria — matriz do sistema.
 ///
 /// Primeiro cadastro da plataforma. Alimenta o cabecalho dos relatorios, a
@@ -104,7 +134,166 @@ model EmpresaConsultoria {
   criadoEm     DateTime @default(now())
   atualizadoEm DateTime @updatedAt
 
+  clientes Cliente[]
+
   @@map("empresa_consultoria")
+}
+
+/// Cliente / contratante — empresa atendida pela consultoria.
+///
+/// Etapa 2 do cadastro. E a chave de segmentacao de toda a plataforma:
+/// ranking por cliente, filtro dos dashboards e escopo das inspecoes,
+/// planos de acao e documentos emitidos.
+model Cliente {
+  id        String             @id @default(uuid())
+  empresaId String
+  empresa   EmpresaConsultoria @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+
+  // --- Identificacao ------------------------------------------------------
+  razaoSocial        String        @db.VarChar(150)
+  nomeFantasia       String        @db.VarChar(120)
+  /// Somente digitos/letras, sem mascara. Aceita CNPJ alfanumerico (2026+).
+  cnpj               String        @db.VarChar(14)
+  inscricaoEstadual  String?       @db.VarChar(20)
+  inscricaoMunicipal String?       @db.VarChar(20)
+  cnaePrincipal      String?       @db.VarChar(7)
+  porte              PorteEmpresa?
+  segmento           String?       @db.VarChar(80)
+  site               String?       @db.VarChar(150)
+
+  // --- Contrato -----------------------------------------------------------
+  numeroContrato       String           @db.VarChar(40)
+  dataInicioContrato   DateTime         @db.Date
+  dataFimContrato      DateTime?        @db.Date
+  situacao             SituacaoContrato @default(ATIVO)
+  escopoServicos       String?          @db.VarChar(500)
+  valorMensal          Decimal?         @db.Decimal(12, 2)
+  diaVencimento        Int?             @db.SmallInt
+  /// Consultor da matriz responsavel pela conta (vira vinculo de usuario na etapa de acessos).
+  consultorResponsavel String?          @db.VarChar(120)
+
+  // --- Perfil SSMA (alimenta ranking e indicadores) -----------------------
+  /// Grau de risco NR-4, Quadro I (1 a 4).
+  grauRisco              Int
+  quantidadeFuncionarios Int
+  /// Meta do Indice Global SSMA (0–100) usada no ranking e nos alertas.
+  metaIndiceGlobal       Decimal @default(85) @db.Decimal(5, 2)
+  possuiCipa             Boolean @default(false)
+  possuiSesmt            Boolean @default(false)
+
+  // --- Interlocutor no cliente --------------------------------------------
+  contatoNome     String  @db.VarChar(120)
+  contatoCargo    String? @db.VarChar(80)
+  contatoEmail    String  @db.VarChar(150)
+  contatoTelefone String  @db.VarChar(11)
+  contatoWhatsapp String? @db.VarChar(11)
+
+  // --- Endereco da sede ----------------------------------------------------
+  cep         String  @db.VarChar(8)
+  logradouro  String  @db.VarChar(150)
+  numero      String  @db.VarChar(20)
+  complemento String? @db.VarChar(80)
+  bairro      String  @db.VarChar(80)
+  cidade      String  @db.VarChar(80)
+  uf          String  @db.Char(2)
+
+  // --- Identidade e anotacoes ---------------------------------------------
+  logoUrl     String? @db.VarChar(300)
+  /// Cor da serie do cliente nos graficos comparativos.
+  corDestaque String  @default("#2563eb") @db.VarChar(7)
+  observacoes String? @db.VarChar(1000)
+
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  terceiros Terceiro[]
+
+  @@unique([empresaId, cnpj])
+  @@unique([empresaId, numeroContrato])
+  @@index([empresaId, situacao])
+  @@index([empresaId, nomeFantasia])
+  @@map("cliente")
+}
+
+/// Empresa contratada / terceiro — Etapa 3.
+///
+/// Empresa terceirizada que atua dentro da operacao de um cliente
+/// (ex.: montagem eletromecanica, pintura industrial) e que tambem recebe
+/// nota e ranking de desempenho SSMA.
+///
+/// O mesmo CNPJ pode aparecer em mais de um cliente: sao cadastros distintos,
+/// porque a nota, a documentacao e a atuacao sao por operacao.
+model Terceiro {
+  id        String  @id @default(uuid())
+  clienteId String
+  cliente   Cliente @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+
+  // --- Identificacao ------------------------------------------------------
+  razaoSocial       String        @db.VarChar(150)
+  nomeFantasia      String        @db.VarChar(120)
+  /// Somente digitos/letras, sem mascara. Aceita CNPJ alfanumerico (2026+).
+  cnpj              String        @db.VarChar(14)
+  inscricaoEstadual String?       @db.VarChar(20)
+  cnaePrincipal     String?       @db.VarChar(7)
+  porte             PorteEmpresa?
+  /// O que o terceiro executa na operacao.
+  atividadePrincipal String       @db.VarChar(120)
+
+  // --- Atuacao na operacao do cliente -------------------------------------
+  tipoVinculo            TipoVinculoTerceiro @default(CONTRATO)
+  numeroContrato         String?             @db.VarChar(40)
+  dataInicioAtuacao      DateTime            @db.Date
+  dataFimAtuacao         DateTime?           @db.Date
+  situacao               SituacaoTerceiro    @default(ATIVO)
+  escopoServicos         String?             @db.VarChar(500)
+  /// Areas/frentes do cliente onde o terceiro atua.
+  areasAtuacao           String?             @db.VarChar(300)
+  quantidadeFuncionarios Int
+
+  // --- Perfil SSMA e desempenho -------------------------------------------
+  /// Grau de risco NR-4, Quadro I (1 a 4).
+  grauRisco           Int
+  /// Nota de desempenho SSMA (0–100) que posiciona o terceiro no ranking.
+  /// Lancada manualmente ate as inspecoes existirem; depois passa a ser calculada.
+  notaSsma            Decimal?  @db.Decimal(5, 2)
+  dataUltimaAvaliacao DateTime? @db.Date
+  metaNotaSsma        Decimal   @default(85) @db.Decimal(5, 2)
+
+  // --- Documentacao e conformidade ----------------------------------------
+  possuiPgr             Boolean   @default(false)
+  possuiPcmso           Boolean   @default(false)
+  /// Vencimento da pasta de documentos do terceiro.
+  documentacaoValidaAte DateTime? @db.Date
+
+  // --- Preposto / responsavel ---------------------------------------------
+  responsavelNome     String  @db.VarChar(120)
+  responsavelCargo    String? @db.VarChar(80)
+  responsavelEmail    String  @db.VarChar(150)
+  responsavelTelefone String  @db.VarChar(11)
+  responsavelWhatsapp String? @db.VarChar(11)
+
+  // --- Endereco (bloco inteiro opcional) ----------------------------------
+  cep         String? @db.VarChar(8)
+  logradouro  String? @db.VarChar(150)
+  numero      String? @db.VarChar(20)
+  complemento String? @db.VarChar(80)
+  bairro      String? @db.VarChar(80)
+  cidade      String? @db.VarChar(80)
+  uf          String? @db.Char(2)
+
+  // --- Identidade e anotacoes ---------------------------------------------
+  logoUrl     String? @db.VarChar(300)
+  corDestaque String  @default("#7c3aed") @db.VarChar(7)
+  observacoes String? @db.VarChar(1000)
+
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  @@unique([clienteId, cnpj])
+  @@index([clienteId, situacao])
+  @@index([clienteId, nomeFantasia])
+  @@index([notaSsma])
+  @@map("terceiro")
 }
 
 /// Trilha de auditoria — obrigatoria em sistemas de SSMA para provar

@@ -11,7 +11,10 @@ export * from './br/cep.js';
 export * from './br/telefone.js';
 export * from './br/cnae.js';
 export * from './br/uf.js';
+export * from './schemas/comuns.js';
 export * from './schemas/empresa-consultoria.js';
+export * from './schemas/cliente.js';
+export * from './schemas/terceiro.js';
 export * from './institucional.js';
 
 export const APP_NOME = 'SafetyGuard EHS 360';

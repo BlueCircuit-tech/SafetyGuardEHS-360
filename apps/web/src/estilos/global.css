@@ -121,6 +121,23 @@ a {
   border-radius: 0 22px 22px 0;
   margin-right: 14px;
   line-height: 1.35;
+  text-decoration: none;
+  transition: 0.15s;
+}
+
+a.etapa-item {
+  color: #a9b6c6;
+}
+
+a.etapa-item:hover {
+  background: #1b2b40;
+  color: #fff;
+}
+
+a.etapa-item.ativa,
+a.etapa-item.ativa:hover {
+  background: var(--primary);
+  color: #fff;
 }
 
 .etapa-item.ativa {
@@ -740,4 +757,202 @@ table.tbl {
   to {
     transform: rotate(360deg);
   }
+}
+
+/* ------------------------------------------------------------- listagem --- */
+.pill.orange {
+  background: var(--orange-light);
+  color: var(--orange);
+}
+
+.pill.purple {
+  background: #f1e9fe;
+  color: #7c3aed;
+}
+
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 13px;
+  margin-bottom: 18px;
+}
+
+.stat {
+  background: #fff;
+  border-radius: var(--raio);
+  padding: 15px;
+  box-shadow: var(--sombra);
+}
+
+.stat .lbl {
+  font-size: 11px;
+  color: var(--gray);
+  font-weight: 700;
+}
+
+.stat .num {
+  font-size: 24px;
+  font-weight: 800;
+  margin-top: 3px;
+}
+
+.stat .sub {
+  font-size: 10.5px;
+  font-weight: 700;
+  margin-top: 2px;
+  color: var(--gray);
+}
+
+.filtros {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  margin-bottom: 14px;
+}
+
+.filtros .campo {
+  margin-bottom: 0;
+}
+
+.filtros .busca {
+  flex: 1 1 260px;
+}
+
+.filtros .estreito {
+  width: 165px;
+}
+
+.tbl tbody tr:hover td {
+  background: #f8fafb;
+}
+
+.tbl td .principal {
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tbl td .secundario {
+  font-size: 11px;
+  color: var(--gray);
+  margin-top: 2px;
+}
+
+.marca-cor {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.acoes-linha {
+  display: flex;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
+.paginacao {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  justify-content: flex-end;
+  padding-top: 14px;
+  font-size: 12.5px;
+  color: var(--gray);
+  flex-wrap: wrap;
+}
+
+.vazio {
+  text-align: center;
+  padding: 42px 18px;
+  color: var(--gray);
+}
+
+.vazio .icone {
+  font-size: 38px;
+  margin-bottom: 10px;
+}
+
+.vazio h4 {
+  font-size: 15px;
+  color: var(--navy);
+  margin-bottom: 6px;
+}
+
+.vazio p {
+  font-size: 12.5px;
+  max-width: 46ch;
+  margin: 0 auto 14px;
+  line-height: 1.55;
+}
+
+.link-voltar {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--gray);
+  text-decoration: none;
+  margin-bottom: 10px;
+}
+
+.link-voltar:hover {
+  color: var(--primary-dark);
+}
+
+.check-linha {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 11px 13px;
+  border: 1.5px solid var(--border);
+  border-radius: 9px;
+  background: #fff;
+  cursor: pointer;
+}
+
+.check-linha input {
+  width: 17px;
+  height: 17px;
+  accent-color: var(--primary);
+  cursor: pointer;
+}
+
+.resumo-lateral {
+  font-size: 12.5px;
+  line-height: 1.9;
+}
+
+.resumo-lateral dt {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--gray);
+  font-weight: 800;
+  margin-top: 10px;
+}
+
+.resumo-lateral dd {
+  font-weight: 600;
+}
+
+/* --------------------------------------------------------- barra de nota --- */
+.barra-nota {
+  height: 6px;
+  border-radius: 4px;
+  background: #eef1f5;
+  overflow: hidden;
+  margin-top: 4px;
+  min-width: 70px;
+}
+
+.barra-nota span {
+  display: block;
+  height: 100%;
+  border-radius: 4px;
 }

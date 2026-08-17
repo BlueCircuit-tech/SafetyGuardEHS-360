@@ -8,8 +8,9 @@ Este repositório nasceu de um protótipo HTML de tela única (preservado em
 [`prototype/index.html`](prototype/index.html)) e foi reescrito como aplicação real:
 monorepo TypeScript com API, banco relacional e front-end.
 
-**Estado atual:** Etapa 1.1 — Cadastro da Empresa de Consultoria — implementada
-ponta a ponta. As demais etapas estão mapeadas no roadmap abaixo.
+**Estado atual:** Etapas 1.1 (Empresa de Consultoria), 2 (Clientes / Contratantes)
+e 3 (Empresas Contratadas / Terceiros) implementadas ponta a ponta. As demais
+estão mapeadas no roadmap abaixo.
 
 ---
 
@@ -43,20 +44,22 @@ safetyguard-ehs-360/
 │   │       ├── app.ts          composição do servidor
 │   │       ├── env.ts          variáveis de ambiente validadas
 │   │       ├── lib/            erros, auditoria, uploads
-│   │       └── modules/        empresa, referências
+│   │       └── modules/        empresa, clientes, terceiros, referências
 │   └── web/                    console React (Vite)
 │       └── src/
 │           ├── componentes/    Campo, Layout, Toast, PréviaInstitucional
-│           ├── lib/            cliente HTTP, máscaras, mapeamento do formulário
-│           └── paginas/        EmpresaPage (Etapa 1.1)
+│           ├── lib/            cliente HTTP, máscaras, datas, mapeamento dos formulários
+│           └── paginas/        EmpresaPage, Clientes*, Terceiros*
 ├── packages/
 │   └── shared/                 contrato de domínio
 │       └── src/
 │           ├── br/             CNPJ, CEP, telefone, CNAE, UF
-│           ├── schemas/        schemas Zod da empresa
+│           ├── schemas/        schemas Zod (comuns, empresa, cliente, terceiro)
 │           └── institucional.ts  cabeçalho/rodapé de relatórios, e-mail e WhatsApp
 ├── docs/
-│   ├── etapa-01-cadastro-empresa.md   especificação de campos e regras
+│   ├── etapa-01-cadastro-empresa.md   campos e regras da matriz
+│   ├── etapa-02-clientes.md           campos e regras dos contratantes
+│   ├── etapa-03-terceiros.md          campos, ranking e conformidade
 │   └── api.md                          referência dos endpoints
 ├── prototype/index.html        protótipo original (referência visual)
 └── docker-compose.yml          PostgreSQL de desenvolvimento
@@ -108,7 +111,7 @@ npm run dev
 | `npm run dev` | API + web em paralelo |
 | `npm run build` | Compila shared → api → web |
 | `npm run typecheck` | TypeScript estrito em todos os workspaces |
-| `npm test` | Vitest (validadores, schemas, auditoria) |
+| `npm test` | Vitest (validadores, schemas, auditoria) — 74 testes |
 | `npm run lint` | ESLint |
 | `npm run db:up` / `db:down` | Sobe / derruba o Postgres |
 | `npm run db:migrate` | Cria e aplica migration a partir do schema |
@@ -145,6 +148,36 @@ A API falha ao iniciar se alguma variável obrigatória estiver ausente ou invá
 - Registro único garantido pelo banco, não só pela aplicação
 
 Detalhes de campos e regras: [`docs/etapa-01-cadastro-empresa.md`](docs/etapa-01-cadastro-empresa.md).
+
+## Etapa 2 — o que já funciona
+
+- Listagem com busca (nome, razão social, CNPJ, contrato, cidade), filtros por
+  situação e grau de risco, ordenação e paginação
+- Cards de resumo: contratos ativos/suspensos/encerrados e trabalhadores cobertos
+- Formulário completo em 6 blocos, com CNPJ, CEP, telefones e CNAE mascarados
+- **Perfil SSMA** (grau de risco NR-4, funcionários, meta do Índice Global, CIPA,
+  SESMT) — a base do ranking e dos indicadores
+- Vigência de contrato validada (fim ≥ início, encerramento exige data) e alerta
+  de *vigência vencida* na listagem
+- CNPJ e número de contrato únicos por matriz, com erro apontando o campo
+- Logo e cor de destaque por cliente, usados nos relatórios e gráficos
+- Trilha de auditoria por cliente
+- `GET /clientes/opcoes` — lista pronta para o seletor de cliente dos dashboards
+
+Detalhes: [`docs/etapa-02-clientes.md`](docs/etapa-02-clientes.md).
+
+## Etapa 3 — o que já funciona
+
+- Terceiros vinculados à operação de um cliente (o mesmo CNPJ pode atuar em
+  clientes diferentes — são cadastros distintos, com nota e documentação próprias)
+- **Ranking de desempenho SSMA** com faixas A/B/C/D e alerta de nota abaixo da meta
+- Situação `BLOQUEADO` e indicador `pendenciaDocumental` (falta PGR, PCMSO ou pasta
+  vencida) — a base do controle de liberação de acesso
+- Filtros por cliente, situação, classe e documentação vencida
+- Endereço opcional, mas tudo-ou-nada; nota exige data de avaliação
+- Trilha de auditoria por terceiro
+
+Detalhes: [`docs/etapa-03-terceiros.md`](docs/etapa-03-terceiros.md).
 Endpoints: [`docs/api.md`](docs/api.md).
 
 ---
@@ -154,23 +187,27 @@ Endpoints: [`docs/api.md`](docs/api.md).
 | Etapa | Escopo | Estado |
 | --- | --- | :-: |
 | 1.1 | Empresa de consultoria (matriz) | ✅ |
-| 1.2 | Clientes / contratos | ⬜ |
-| 1.3 | Unidades e áreas (QR Code) | ⬜ |
-| 2 | Pessoas, perfis e acessos (autenticação) | ⬜ |
-| 3 | Inspeções, planos de ação e escalonamento | ⬜ |
-| 4 | Saúde ocupacional e documentos (ASO, PGR, PCA, LTCAT, PPP) | ⬜ |
-| 5 | Dashboards executivo, gerencial e operacional | ⬜ |
+| 2 | Clientes / contratantes | ✅ |
+| 3 | Empresas contratadas / terceiros | ✅ |
+| 4 | Unidades e áreas (QR Code) | ⬜ |
+| 5 | Pessoas, perfis e acessos (autenticação) | ⬜ |
+| 6 | Inspeções, planos de ação e escalonamento | ⬜ |
+| 7 | Saúde ocupacional e documentos (ASO, PGR, PCA, LTCAT, PPP) | ⬜ |
+| 8 | Dashboards executivo, gerencial e operacional | ⬜ |
 
 ---
 
 ## Notas de arquitetura
 
-- **Sem autenticação ainda.** A Etapa 2 traz usuários e perfis. Até lá, o autor das
+- **Sem autenticação ainda.** A Etapa 5 traz usuários e perfis. Até lá, o autor das
   alterações vem do cabeçalho `x-usuario` e a API não deve ser exposta publicamente.
 - **Dados normalizados.** CNPJ, CEP, telefones e CNAE são gravados sem máscara; a
   formatação é aplicada na leitura. Nenhuma consulta depende de formatação.
 - **Uploads em disco local.** Serve para desenvolvimento; em produção troque
   `lib/arquivos.ts` por um provedor de object storage.
-- **Multi-tenant.** O protótipo previa isolamento por cliente/contrato. O modelo já
-  separa a matriz (consultoria) dos clientes atendidos, que entram na Etapa 1.2.
+- **Datas puras.** Vigências e data de fundação usam `@db.Date` e são formatadas a
+  partir da string ISO, sem passar pelo fuso local — caso contrário, em UTC-3, toda
+  data apareceria um dia antes.
+- **Multi-tenant.** O modelo separa a matriz (consultoria) dos clientes atendidos;
+  toda consulta de cliente é escopada pela matriz.
 # SafetyGuardEHS-360

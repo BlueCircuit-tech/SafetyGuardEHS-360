@@ -5,26 +5,17 @@ import { isCelular, isTelefoneValido, limparTelefone } from '../br/telefone.js';
 import { isCnaeValido, limparCnae } from '../br/cnae.js';
 import { SIGLAS_UF, type SiglaUf } from '../br/uf.js';
 
-/* -------------------------------------------------------------------------- */
-/* Helpers                                                                     */
-/* -------------------------------------------------------------------------- */
+import {
+  COR_PRIMARIA_PADRAO,
+  COR_SECUNDARIA_PADRAO,
+  HEX_COR,
+  TIMEZONE_PADRAO,
+  dataNaoFutura,
+  opcional,
+  texto,
+} from './comuns.js';
 
-/** Torna o campo opcional tratando string vazia como ausencia de valor (null). */
-function opcional<T extends z.ZodTypeAny>(schema: T) {
-  return z.preprocess(
-    (valor) => (typeof valor === 'string' && valor.trim() === '' ? null : valor ?? null),
-    schema.nullable(),
-  );
-}
-
-const texto = (min: number, max: number, campo: string) =>
-  z
-    .string({ required_error: `${campo} e obrigatorio.`, invalid_type_error: `${campo} deve ser um texto.` })
-    .trim()
-    .min(min, `${campo} deve ter ao menos ${min} caracteres.`)
-    .max(max, `${campo} deve ter no maximo ${max} caracteres.`);
-
-const HEX_COR = /^#([0-9a-fA-F]{6})$/;
+export { COR_PRIMARIA_PADRAO, COR_SECUNDARIA_PADRAO, TIMEZONE_PADRAO };
 
 /* -------------------------------------------------------------------------- */
 /* Dominio                                                                     */
@@ -44,9 +35,6 @@ export const ROTULO_REGIME_TRIBUTARIO: Record<RegimeTributario, string> = {
   MEI: 'MEI',
 };
 
-export const COR_PRIMARIA_PADRAO = '#059669';
-export const COR_SECUNDARIA_PADRAO = '#0e1a2b';
-export const TIMEZONE_PADRAO = 'America/Sao_Paulo';
 
 /* -------------------------------------------------------------------------- */
 /* Schema de escrita (create)                                                  */
@@ -83,11 +71,7 @@ export const empresaConsultoriaCreateSchema = z.object({
   ),
   naturezaJuridica: opcional(z.string().trim().max(120)),
   regimeTributario: opcional(z.enum(REGIMES_TRIBUTARIOS)),
-  dataFundacao: opcional(
-    z.coerce
-      .date()
-      .refine((data) => data.getTime() <= Date.now(), 'Data de fundacao nao pode estar no futuro.'),
-  ),
+  dataFundacao: opcional(dataNaoFutura('Data de fundacao')),
 
   /* --- Contato institucional -------------------------------------------- */
   email: z

@@ -48,7 +48,7 @@ export function registrarTratadorDeErros(app: FastifyInstance): void {
 
     if (erro instanceof ErroApp) {
       return reply.status(erro.status).send({
-        erro: { codigo: erro.codigo, mensagem: erro.message, detalhes: erro.detalhes },
+        erro: { codigo: erro.codigo, mensagem: erro.message, campos: erro.campos, detalhes: erro.detalhes },
       } satisfies RespostaErro);
     }
 

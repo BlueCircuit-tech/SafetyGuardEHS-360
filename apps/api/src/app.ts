@@ -7,6 +7,8 @@ import { corsOrigins, env, isProducao, uploadDir, uploadMaxBytes } from './env.j
 import { garantirDiretorioDeUpload, PREFIXO_PUBLICO } from './lib/arquivos.js';
 import { registrarTratadorDeErros } from './lib/tratador-erros.js';
 import { rotasEmpresa } from './modules/empresa/empresa.routes.js';
+import { rotasClientes } from './modules/clientes/cliente.routes.js';
+import { rotasTerceiros } from './modules/terceiros/terceiro.routes.js';
 import { rotasReferencias } from './modules/referencias/referencias.routes.js';
 import { prisma } from './db.js';
 
@@ -41,6 +43,8 @@ export async function criarApp(): Promise<FastifyInstance> {
   await app.register(
     async (api) => {
       await api.register(rotasEmpresa);
+      await api.register(rotasClientes);
+      await api.register(rotasTerceiros);
       await api.register(rotasReferencias);
     },
     { prefix: PREFIXO_API },

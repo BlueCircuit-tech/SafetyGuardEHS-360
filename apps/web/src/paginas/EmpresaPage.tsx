@@ -7,6 +7,8 @@ import { PreviaInstitucional } from '../componentes/PreviaInstitucional';
 import { useToast } from '../componentes/Toast';
 import { ErroApi, api, urlAbsoluta } from '../lib/api';
 import { MASCARAS, type NomeMascara } from '../lib/mascaras';
+import { useBuscaCep } from '../lib/useBuscaCep';
+import { formatarDataHora } from '../lib/datas';
 import {
   VALORES_INICIAIS,
   empresaParaFormulario,
@@ -49,7 +51,6 @@ export function EmpresaPage() {
   const [referencias, setReferencias] = useState<Referencias>(REFERENCIAS_VAZIAS);
   const [aba, setAba] = useState<'cadastro' | 'historico'>('cadastro');
   const [auditoria, setAuditoria] = useState<RegistroAuditoria[]>([]);
-  const [buscandoCep, setBuscandoCep] = useState(false);
   const [enviandoLogo, setEnviandoLogo] = useState(false);
   const inputLogo = useRef<HTMLInputElement>(null);
 
@@ -132,31 +133,17 @@ export function EmpresaPage() {
   const campoCep = comMascara('cep', 'cep');
 
   /* --------------------------------------------------------------- cep --- */
-  async function buscarCep() {
-    const cep = valores.cep?.replace(/\D/g, '') ?? '';
-    if (cep.length !== 8) return;
-
-    setBuscandoCep(true);
-    try {
-      const endereco = await api.get<{
-        logradouro: string;
-        bairro: string;
-        cidade: string;
-        uf: string;
-        complemento: string;
-      }>(`/referencias/cep/${cep}`);
-
-      if (endereco.logradouro) setValue('logradouro', endereco.logradouro, { shouldDirty: true });
-      if (endereco.bairro) setValue('bairro', endereco.bairro, { shouldDirty: true });
-      if (endereco.cidade) setValue('cidade', endereco.cidade, { shouldDirty: true });
-      if (endereco.uf) setValue('uf', endereco.uf, { shouldDirty: true });
-      mostrar('Endereco preenchido pelo CEP.', 'sucesso');
-    } catch (erro) {
-      mostrar(erro instanceof Error ? erro.message : 'Nao foi possivel consultar o CEP.', 'erro');
-    } finally {
-      setBuscandoCep(false);
-    }
-  }
+  const { buscar: buscarCep, buscando: buscandoCep } = useBuscaCep(
+    useCallback(
+      (endereco) => {
+        if (endereco.logradouro) setValue('logradouro', endereco.logradouro, { shouldDirty: true });
+        if (endereco.bairro) setValue('bairro', endereco.bairro, { shouldDirty: true });
+        if (endereco.cidade) setValue('cidade', endereco.cidade, { shouldDirty: true });
+        if (endereco.uf) setValue('uf', endereco.uf, { shouldDirty: true });
+      },
+      [setValue],
+    ),
+  );
 
   /* ------------------------------------------------------------- envio --- */
   const aoSalvar = handleSubmit(async (dados) => {
@@ -280,7 +267,7 @@ export function EmpresaPage() {
                 ) : (
                   auditoria.map((registro) => (
                     <tr key={registro.id}>
-                      <td>{new Date(registro.criadoEm).toLocaleString('pt-BR')}</td>
+                      <td>{formatarDataHora(registro.criadoEm)}</td>
                       <td>
                         <span className={`pill ${registro.acao === 'CRIACAO' ? 'ok' : 'info'}`}>{registro.acao}</span>
                       </td>
@@ -461,7 +448,7 @@ export function EmpresaPage() {
                       value={valores.cep}
                       onBlur={(evento) => {
                         void campoCep.onBlur(evento);
-                        void buscarCep();
+                        void buscarCep(evento.target.value);
                       }}
                       aria-invalid={Boolean(erro('cep'))}
                       placeholder="74230-020"
@@ -677,7 +664,7 @@ export function EmpresaPage() {
                     {modoEdicao
                       ? isDirty
                         ? 'Ha alteracoes nao salvas.'
-                        : `Ultima atualizacao: ${empresa ? new Date(empresa.atualizadoEm).toLocaleString('pt-BR') : '—'}`
+                        : `Ultima atualizacao: ${formatarDataHora(empresa?.atualizadoEm)}`
                       : 'Campos marcados com * sao obrigatorios.'}
                   </span>
                   {modoEdicao ? (
