@@ -1,4 +1,4 @@
-import type { FastifyInstance, FastifyRequest } from 'fastify';
+import type { FastifyInstance } from 'fastify';
 import {
   empresaConsultoriaCreateSchema,
   empresaConsultoriaUpdateSchema,
@@ -20,20 +20,9 @@ import {
 } from './empresa.service.js';
 import { MIMES_IMAGEM_ACEITOS, removerArquivoPublico, salvarImagem } from '../../lib/arquivos.js';
 import { RequisicaoInvalida } from '../../lib/erros.js';
+import { contextoDeAuditoria } from '../../lib/autenticacao.js';
+import { guardaPorMetodo } from '../../lib/guarda.js';
 import { uploadMaxBytes } from '../../env.js';
-import type { ContextoAuditoria } from '../../lib/auditoria.js';
-
-/**
- * Autor da alteracao. Enquanto a Etapa de autenticacao nao existe, aceitamos o
- * cabecalho `x-usuario` para que a trilha de auditoria ja nasca preenchida.
- */
-function contextoDaRequisicao(request: FastifyRequest): ContextoAuditoria {
-  const cabecalho = request.headers['x-usuario'];
-  return {
-    autor: (Array.isArray(cabecalho) ? cabecalho[0] : cabecalho) ?? 'sistema',
-    ip: request.ip,
-  };
-}
 
 /** Acrescenta os campos com mascara — o banco guarda sempre sem formatacao. */
 function comFormatacao(empresa: EmpresaConsultoria) {
@@ -53,6 +42,8 @@ function comFormatacao(empresa: EmpresaConsultoria) {
 }
 
 export async function rotasEmpresa(app: FastifyInstance): Promise<void> {
+  app.addHook('preHandler', guardaPorMetodo(app, { leitura: 'cadastros:ler', escrita: 'cadastros:escrever' }));
+
   /** Situacao da Etapa 1 — usado pelo front para decidir entre criar e editar. */
   app.get('/empresa/status', async () => {
     const empresa = await obterEmpresa();
@@ -70,7 +61,7 @@ export async function rotasEmpresa(app: FastifyInstance): Promise<void> {
 
   app.post('/empresa', async (request, reply) => {
     const dados = empresaConsultoriaCreateSchema.parse(request.body);
-    const empresa = await criarEmpresa(dados, contextoDaRequisicao(request));
+    const empresa = await criarEmpresa(dados, contextoDeAuditoria(request));
     return reply.status(201).send(comFormatacao(empresa));
   });
 
@@ -79,7 +70,7 @@ export async function rotasEmpresa(app: FastifyInstance): Promise<void> {
     if (Object.keys(dados).length === 0) {
       throw new RequisicaoInvalida('Nenhum campo enviado para atualizacao.', 'PAYLOAD_VAZIO');
     }
-    const empresa = await atualizarEmpresa(dados, contextoDaRequisicao(request));
+    const empresa = await atualizarEmpresa(dados, contextoDeAuditoria(request));
     return comFormatacao(empresa);
   });
 
@@ -108,7 +99,7 @@ export async function rotasEmpresa(app: FastifyInstance): Promise<void> {
 
     const conteudo = await arquivo.toBuffer();
     const logoUrl = await salvarImagem(conteudo, arquivo.mimetype, 'logo');
-    const atualizada = await definirLogo(logoUrl, contextoDaRequisicao(request));
+    const atualizada = await definirLogo(logoUrl, contextoDeAuditoria(request));
 
     await removerArquivoPublico(empresa.logoUrl);
 
@@ -117,7 +108,7 @@ export async function rotasEmpresa(app: FastifyInstance): Promise<void> {
 
   app.delete('/empresa/logo', async (request) => {
     const empresa = await obterEmpresaOuFalhar();
-    const atualizada = await definirLogo(null, contextoDaRequisicao(request));
+    const atualizada = await definirLogo(null, contextoDeAuditoria(request));
     await removerArquivoPublico(empresa.logoUrl);
     return comFormatacao(atualizada);
   });

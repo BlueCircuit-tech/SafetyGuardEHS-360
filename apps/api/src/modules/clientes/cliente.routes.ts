@@ -1,4 +1,4 @@
-import type { FastifyInstance, FastifyRequest } from 'fastify';
+import type { FastifyInstance } from 'fastify';
 import type { Cliente } from '@prisma/client';
 import { z } from 'zod';
 import {
@@ -23,20 +23,13 @@ import {
 } from './cliente.service.js';
 import { MIMES_IMAGEM_ACEITOS, removerArquivoPublico, salvarImagem } from '../../lib/arquivos.js';
 import { RequisicaoInvalida } from '../../lib/erros.js';
+import { contextoDeAuditoria } from '../../lib/autenticacao.js';
+import { guardaPorMetodo } from '../../lib/guarda.js';
 import { uploadMaxBytes } from '../../env.js';
-import type { ContextoAuditoria } from '../../lib/auditoria.js';
 
 const paramsSchema = z.object({ id: z.string().uuid('Identificador de cliente invalido.') });
 
 const MS_POR_DIA = 24 * 60 * 60 * 1000;
-
-function contextoDaRequisicao(request: FastifyRequest): ContextoAuditoria {
-  const cabecalho = request.headers['x-usuario'];
-  return {
-    autor: (Array.isArray(cabecalho) ? cabecalho[0] : cabecalho) ?? 'sistema',
-    ip: request.ip,
-  };
-}
 
 const dinheiro = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
 
@@ -70,6 +63,8 @@ function serializar(cliente: Cliente) {
 }
 
 export async function rotasClientes(app: FastifyInstance): Promise<void> {
+  app.addHook('preHandler', guardaPorMetodo(app, { leitura: 'cadastros:ler', escrita: 'cadastros:escrever' }));
+
   /** Cards de contagem da listagem. */
   app.get('/clientes/resumo', async () => resumoClientes());
 
@@ -94,7 +89,7 @@ export async function rotasClientes(app: FastifyInstance): Promise<void> {
 
   app.post('/clientes', async (request, reply) => {
     const dados = clienteCreateSchema.parse(request.body);
-    const cliente = await criarCliente(dados, contextoDaRequisicao(request));
+    const cliente = await criarCliente(dados, contextoDeAuditoria(request));
     return reply.status(201).send(serializar(cliente));
   });
 
@@ -106,12 +101,12 @@ export async function rotasClientes(app: FastifyInstance): Promise<void> {
       throw new RequisicaoInvalida('Nenhum campo enviado para atualizacao.', 'PAYLOAD_VAZIO');
     }
 
-    return serializar(await atualizarCliente(id, dados, contextoDaRequisicao(request)));
+    return serializar(await atualizarCliente(id, dados, contextoDeAuditoria(request)));
   });
 
   app.delete('/clientes/:id', async (request, reply) => {
     const { id } = paramsSchema.parse(request.params);
-    await excluirCliente(id, contextoDaRequisicao(request));
+    await excluirCliente(id, contextoDeAuditoria(request));
     return reply.status(204).send();
   });
 
@@ -138,7 +133,7 @@ export async function rotasClientes(app: FastifyInstance): Promise<void> {
 
     const conteudo = await arquivo.toBuffer();
     const logoUrl = await salvarImagem(conteudo, arquivo.mimetype, 'cliente');
-    const atualizado = await definirLogoCliente(id, logoUrl, contextoDaRequisicao(request));
+    const atualizado = await definirLogoCliente(id, logoUrl, contextoDeAuditoria(request));
 
     await removerArquivoPublico(cliente.logoUrl);
 
@@ -148,7 +143,7 @@ export async function rotasClientes(app: FastifyInstance): Promise<void> {
   app.delete('/clientes/:id/logo', async (request) => {
     const { id } = paramsSchema.parse(request.params);
     const cliente = await obterClienteOuFalhar(id);
-    const atualizado = await definirLogoCliente(id, null, contextoDaRequisicao(request));
+    const atualizado = await definirLogoCliente(id, null, contextoDeAuditoria(request));
     await removerArquivoPublico(cliente.logoUrl);
     return serializar(atualizado);
   });

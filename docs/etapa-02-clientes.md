@@ -147,8 +147,10 @@ contrato ou cidade), `situacao`, `grauRisco`, `uf`, `ordenarPor`
 
 - **Etapa 3 — Empresas Contratadas / Terceiros:** as terceirizadas que atuam
   dentro da operação de cada cliente ([`etapa-03-terceiros.md`](etapa-03-terceiros.md)).
-- **Etapa 4 — Unidades e Áreas:** cada cliente terá suas unidades e áreas, com QR
-  Code por área para a inspeção de campo.
+- **Etapa 4 — Centros de Negócio:** agrupamento acima do cliente, por regional,
+  unidade ou tipo de contrato ([`etapa-04-centros-negocio.md`](etapa-04-centros-negocio.md)).
+- **Etapa 5 — Áreas e QR Code:** cada cliente terá suas áreas de inspeção, com QR
+  Code por área.
 - **Ranking e dashboards:** `metaIndiceGlobal`, `grauRisco` e
   `quantidadeFuncionarios` já são a base dos indicadores; faltam os eventos
   (inspeções e planos de ação) para calcular o Índice Global de cada cliente.

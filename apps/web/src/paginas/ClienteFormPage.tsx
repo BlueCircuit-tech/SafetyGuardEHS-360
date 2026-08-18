@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Icone } from '../componentes/Icone';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useForm, type Path, type Resolver } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -15,6 +16,12 @@ import {
   clienteParaPayload,
   type ClienteApi,
 } from '../lib/cliente-form';
+
+interface OpcaoCentro {
+  id: string;
+  nome: string;
+  codigo: string;
+}
 
 interface Referencias {
   ufs: Array<{ sigla: string; nome: string }>;
@@ -59,6 +66,7 @@ export function ClienteFormPage() {
   const [carregando, setCarregando] = useState(modoEdicao);
   const [cliente, setCliente] = useState<ClienteApi | null>(null);
   const [referencias, setReferencias] = useState<Referencias>(REFERENCIAS_VAZIAS);
+  const [centros, setCentros] = useState<OpcaoCentro[]>([]);
   const [aba, setAba] = useState<'cadastro' | 'historico'>('cadastro');
   const [auditoria, setAuditoria] = useState<RegistroAuditoria[]>([]);
   const [enviandoLogo, setEnviandoLogo] = useState(false);
@@ -87,12 +95,13 @@ export function ClienteFormPage() {
     let ativo = true;
 
     async function carregar() {
-      try {
-        const refs = await api.get<Referencias>('/referencias');
-        if (ativo) setReferencias(refs);
-      } catch {
-        // referências são opcionais para o formulário funcionar
-      }
+      const [refs, opcoesCentro] = await Promise.allSettled([
+        api.get<Referencias>('/referencias'),
+        api.get<OpcaoCentro[]>('/centros-negocio/opcoes?incluirInativos=true'),
+      ]);
+
+      if (ativo && refs.status === 'fulfilled') setReferencias(refs.value);
+      if (ativo && opcoesCentro.status === 'fulfilled') setCentros(opcoesCentro.value);
 
       if (!id) return;
 
@@ -266,7 +275,7 @@ export function ClienteFormPage() {
 
       {aba === 'historico' ? (
         <div className="painel">
-          <h3>🧾 Trilha de auditoria</h3>
+          <h3><Icone nome="documento" /> Trilha de auditoria</h3>
           <p className="desc">Quem alterou o quê e quando, desde a criação do cadastro.</p>
           <div className="tbl-wrap">
             <table className="tbl">
@@ -317,9 +326,37 @@ export function ClienteFormPage() {
         <form onSubmit={aoSalvar} noValidate>
           <div className="layout-form">
             <div>
+              {/* ------------------------------------------ agrupamento --- */}
+              <section className="painel">
+                <h3><Icone nome="pasta" /> Agrupamento</h3>
+                <p className="desc">
+                  Centro de negócio ao qual este cliente pertence — regional, unidade ou tipo de contrato. É o filtro
+                  transversal dos dashboards.
+                </p>
+
+                <Campo
+                  label="Centro de negócio"
+                  erro={erro('centroNegocioId')}
+                  ajuda={
+                    centros.length === 0
+                      ? 'Nenhum centro cadastrado ainda — o campo é opcional.'
+                      : 'Opcional. Cliente sem centro não aparece quando o dashboard é filtrado por centro.'
+                  }
+                >
+                  <select {...register('centroNegocioId')} aria-invalid={Boolean(erro('centroNegocioId'))}>
+                    <option value="">Sem centro de negócio</option>
+                    {centros.map((centro) => (
+                      <option key={centro.id} value={centro.id}>
+                        {centro.nome} ({centro.codigo})
+                      </option>
+                    ))}
+                  </select>
+                </Campo>
+              </section>
+
               {/* ------------------------------------- identificação --- */}
               <section className="painel">
-                <h3>🏭 Identificação</h3>
+                <h3><Icone nome="fabrica" /> Identificação</h3>
                 <p className="desc">Dados cadastrais da empresa contratante, conforme o cartão CNPJ.</p>
 
                 <Campo label="Razão social" obrigatorio erro={erro('razaoSocial')}>
@@ -393,7 +430,7 @@ export function ClienteFormPage() {
 
               {/* ------------------------------------------- contrato --- */}
               <section className="painel">
-                <h3>📄 Contrato</h3>
+                <h3><Icone nome="documento" /> Contrato</h3>
                 <p className="desc">Vigência e escopo do serviço prestado pela consultoria.</p>
 
                 <div className="row3">
@@ -448,7 +485,7 @@ export function ClienteFormPage() {
 
               {/* ---------------------------------------- perfil SSMA --- */}
               <section className="painel">
-                <h3>⚠️ Perfil SSMA</h3>
+                <h3><Icone nome="alerta" /> Perfil SSMA</h3>
                 <p className="desc">
                   Base do ranking, dos indicadores e do dimensionamento das equipes de segurança.
                 </p>
@@ -496,7 +533,7 @@ export function ClienteFormPage() {
 
               {/* --------------------------------------- interlocutor --- */}
               <section className="painel">
-                <h3>👤 Interlocutor no cliente</h3>
+                <h3><Icone nome="pessoa" /> Interlocutor no cliente</h3>
                 <p className="desc">Quem recebe os relatórios, alertas e notificações deste contrato.</p>
 
                 <div className="row2">
@@ -532,7 +569,7 @@ export function ClienteFormPage() {
 
               {/* ------------------------------------------- endereço --- */}
               <section className="painel">
-                <h3>📍 Endereço da sede</h3>
+                <h3><Icone nome="local" /> Endereço da sede</h3>
                 <p className="desc">Endereço administrativo. As frentes de trabalho entram na etapa de unidades e áreas.</p>
 
                 <div className="row-cep">
@@ -587,14 +624,14 @@ export function ClienteFormPage() {
 
               {/* ------------------------------------------ identidade -- */}
               <section className="painel" style={{ paddingBottom: 0 }}>
-                <h3>🎨 Identidade e anotações</h3>
+                <h3><Icone nome="paleta" /> Identidade e anotações</h3>
                 <p className="desc">Cor e logo do cliente nos relatórios e nos gráficos comparativos.</p>
 
                 <div className="row2">
                   <Campo label="Logo" ajuda="PNG, JPG, WEBP ou SVG — até 5 MB.">
                     <div className="logo-box">
                       <div className="logo-preview">
-                        {logoAtual ? <img src={logoAtual} alt="Logo do cliente" /> : <span aria-hidden="true">🏭</span>}
+                        {logoAtual ? <img src={logoAtual} alt="Logo do cliente" /> : <span aria-hidden="true"><Icone nome="fabrica" /></span>}
                       </div>
                       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                         <input
@@ -633,7 +670,7 @@ export function ClienteFormPage() {
                   <textarea {...register('observacoes')} placeholder="Particularidades do contrato, restrições de acesso, contatos alternativos." />
                 </Campo>
 
-                <div className="barra-acoes" style={{ marginLeft: -18, marginRight: -18 }}>
+                <div className="barra-acoes rodape-form">
                   <span className="aviso">
                     {modoEdicao
                       ? isDirty
@@ -663,7 +700,7 @@ export function ClienteFormPage() {
 
             <aside className="coluna-previa">
               <div className="painel">
-                <h3>📊 Como entra no ranking</h3>
+                <h3><Icone nome="grafico" /> Como entra no ranking</h3>
                 <p className="desc">
                   Esta é a linha do cliente nos dashboards e no comparativo entre contratos.
                 </p>
@@ -671,7 +708,7 @@ export function ClienteFormPage() {
                 <div className="previa-doc">
                   <div className="cab" style={{ background: 'var(--navy)' }}>
                     <div className="logo">
-                      {logoAtual ? <img src={logoAtual} alt="" /> : <span aria-hidden="true">🏭</span>}
+                      {logoAtual ? <img src={logoAtual} alt="" /> : <span aria-hidden="true"><Icone nome="fabrica" /></span>}
                     </div>
                     <div>
                       <div className="nome" style={{ color: valores.corDestaque || '#fff' }}>

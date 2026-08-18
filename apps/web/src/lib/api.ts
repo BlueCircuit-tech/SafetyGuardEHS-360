@@ -3,6 +3,44 @@
 export const API_URL = (import.meta.env.VITE_API_URL ?? 'http://localhost:3333').replace(/\/$/, '');
 const BASE = `${API_URL}/api/v1`;
 
+/* -------------------------------------------------------------------------- */
+/* Sessão                                                                      */
+/* -------------------------------------------------------------------------- */
+
+const CHAVE_TOKEN = 'safetyguard.token';
+
+let token: string | null = null;
+let aoExpirar: (() => void) | null = null;
+
+/** Lê o token persistido — usado para retomar a sessão no carregamento. */
+export function lerTokenSalvo(): string | null {
+  if (token) return token;
+  try {
+    token = window.localStorage.getItem(CHAVE_TOKEN);
+  } catch {
+    token = null;
+  }
+  return token;
+}
+
+export function definirToken(novo: string | null): void {
+  token = novo;
+  try {
+    if (novo) window.localStorage.setItem(CHAVE_TOKEN, novo);
+    else window.localStorage.removeItem(CHAVE_TOKEN);
+  } catch {
+    // navegador sem storage (aba anônima restrita): a sessão vive só em memória
+  }
+}
+
+/** Registra o que fazer quando a API devolver 401. Devolve o cancelador. */
+export function registrarAoExpirar(callback: () => void): () => void {
+  aoExpirar = callback;
+  return () => {
+    aoExpirar = null;
+  };
+}
+
 export interface CorpoErro {
   erro: {
     codigo: string;
@@ -44,8 +82,7 @@ async function requisitar<T>(caminho: string, init: RequestInit = {}): Promise<T
       ...init,
       headers: {
         Accept: 'application/json',
-        // Sem modulo de autenticacao ainda: identifica o autor na auditoria.
-        'x-usuario': 'console-web',
+        ...(lerTokenSalvo() ? { Authorization: `Bearer ${lerTokenSalvo()}` } : {}),
         ...(init.body instanceof FormData ? {} : { 'Content-Type': 'application/json' }),
         ...init.headers,
       },
@@ -60,6 +97,12 @@ async function requisitar<T>(caminho: string, init: RequestInit = {}): Promise<T
   const corpo = texto ? (JSON.parse(texto) as unknown) : null;
 
   if (!resposta.ok) {
+    // Sessão caiu: limpa o token e avisa quem estiver ouvindo, para a
+    // aplicação voltar ao login em vez de insistir com um token morto.
+    if (resposta.status === 401) {
+      definirToken(null);
+      aoExpirar?.();
+    }
     throw new ErroApi(resposta.status, corpo as CorpoErro | null);
   }
 

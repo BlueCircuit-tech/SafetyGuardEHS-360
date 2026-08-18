@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Icone } from '../componentes/Icone';
 import { useForm, type Path, type Resolver } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { empresaConsultoriaCreateSchema, type EmpresaFormValues } from '@safetyguard/shared';
@@ -224,7 +225,7 @@ export function EmpresaPage() {
           </p>
         </div>
         <span className={`pill ${modoEdicao ? 'ok' : 'warn'}`}>
-          {modoEdicao ? '✓ Etapa 1.1 concluida' : '● Etapa 1.1 pendente'}
+          {modoEdicao ? 'Etapa 1.1 concluida' : 'Etapa 1.1 pendente'}
         </span>
       </div>
 
@@ -245,7 +246,7 @@ export function EmpresaPage() {
 
       {aba === 'historico' ? (
         <div className="painel">
-          <h3>🧾 Trilha de auditoria</h3>
+          <h3><Icone nome="documento" /> Trilha de auditoria</h3>
           <p className="desc">Toda alteracao da matriz fica registrada — exigencia basica de rastreabilidade em SSMA.</p>
           <div className="tbl-wrap">
             <table className="tbl">
@@ -298,14 +299,14 @@ export function EmpresaPage() {
             <div>
               {!modoEdicao ? (
                 <div className="hint">
-                  🏢 <b>Nenhuma empresa cadastrada ainda.</b> Preencha os dados abaixo para concluir a Etapa 1.1 — sem
+                  <Icone nome="predio" /> <b>Nenhuma empresa cadastrada ainda.</b> Preencha os dados abaixo para concluir a Etapa 1.1 — sem
                   ela, os demais cadastros (clientes, unidades, inspecoes) nao podem ser criados.
                 </div>
               ) : null}
 
               {/* ---------------------------------------- identificacao --- */}
               <section className="painel">
-                <h3>🏢 Identificacao</h3>
+                <h3><Icone nome="predio" /> Identificacao</h3>
                 <p className="desc">Dados cadastrais da consultoria, conforme o cartao CNPJ.</p>
 
                 <Campo label="Razao social" obrigatorio erro={erro('razaoSocial')}>
@@ -395,7 +396,7 @@ export function EmpresaPage() {
 
               {/* --------------------------------------------- contato --- */}
               <section className="painel">
-                <h3>📞 Contato institucional</h3>
+                <h3><Icone nome="telefone" /> Contato institucional</h3>
                 <p className="desc">Origem das mensagens automaticas e canal de retorno nos documentos emitidos.</p>
 
                 <div className="row2">
@@ -438,7 +439,7 @@ export function EmpresaPage() {
 
               {/* -------------------------------------------- endereco --- */}
               <section className="painel">
-                <h3>📍 Endereco</h3>
+                <h3><Icone nome="local" /> Endereco</h3>
                 <p className="desc">Sai no cabecalho dos relatorios e no rodape dos laudos.</p>
 
                 <div className="row-cep">
@@ -493,7 +494,7 @@ export function EmpresaPage() {
 
               {/* --------------------------------- responsavel tecnico --- */}
               <section className="painel">
-                <h3>👷 Responsavel tecnico</h3>
+                <h3><Icone nome="capacete" /> Responsavel tecnico</h3>
                 <p className="desc">Profissional que assina os laudos, programas e relatorios de auditoria.</p>
 
                 <div className="row2">
@@ -559,13 +560,13 @@ export function EmpresaPage() {
 
               {/* --------------------------------------- identidade ------ */}
               <section className="painel">
-                <h3>🎨 Identidade visual e textos institucionais</h3>
+                <h3><Icone nome="paleta" /> Identidade visual e textos institucionais</h3>
                 <p className="desc">Definem a aparencia dos documentos e o texto fixo de cada canal.</p>
 
                 <Campo label="Logo" ajuda="PNG, JPG, WEBP ou SVG — ate 5 MB. Aparece no cabecalho dos documentos.">
                   <div className="logo-box">
                     <div className="logo-preview">
-                      {logoAtual ? <img src={logoAtual} alt="Logo atual" /> : <span aria-hidden="true">🦺</span>}
+                      {logoAtual ? <img src={logoAtual} alt="Logo atual" /> : <span aria-hidden="true"><Icone nome="escudo" /></span>}
                     </div>
                     <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                       <input
@@ -632,7 +633,7 @@ export function EmpresaPage() {
 
               {/* ------------------------------------------ operacao ----- */}
               <section className="painel" style={{ paddingBottom: 0 }}>
-                <h3>⚙️ Operacao</h3>
+                <h3><Icone nome="engrenagem" /> Operacao</h3>
                 <p className="desc">Fuso usado nos prazos de planos de acao e nos carimbos de data dos documentos.</p>
 
                 <div className="row2">
@@ -659,7 +660,7 @@ export function EmpresaPage() {
                   </Campo>
                 </div>
 
-                <div className="barra-acoes" style={{ marginLeft: -18, marginRight: -18 }}>
+                <div className="barra-acoes rodape-form">
                   <span className="aviso">
                     {modoEdicao
                       ? isDirty

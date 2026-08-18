@@ -1,6 +1,6 @@
 /** Mascaras progressivas — aplicadas enquanto o usuario digita. */
 
-import { limparCep, limparCnae, limparCnpj, limparTelefone } from '@safetyguard/shared';
+import { limparCep, limparCnae, limparCnpj, limparCpf, limparTelefone } from '@safetyguard/shared';
 
 /** 00.000.000/0000-00 — aceita letras nas 12 primeiras posicoes (CNPJ alfanumerico). */
 export function mascaraCnpj(valor: string): string {
@@ -29,6 +29,16 @@ export function mascaraTelefone(valor: string): string {
   return `(${base.slice(0, 2)}) ${parte1}${parte2 ? `-${parte2}` : ''}`;
 }
 
+/** 000.000.000-00 */
+export function mascaraCpf(valor: string): string {
+  const base = limparCpf(valor).slice(0, 11);
+  let saida = base.slice(0, 3);
+  if (base.length > 3) saida += `.${base.slice(3, 6)}`;
+  if (base.length > 6) saida += `.${base.slice(6, 9)}`;
+  if (base.length > 9) saida += `-${base.slice(9, 11)}`;
+  return saida;
+}
+
 /** 0000-0/00 */
 export function mascaraCnae(valor: string): string {
   const base = limparCnae(valor).slice(0, 7);
@@ -43,6 +53,7 @@ export const MASCARAS = {
   cep: mascaraCep,
   telefone: mascaraTelefone,
   cnae: mascaraCnae,
+  cpf: mascaraCpf,
 } as const;
 
 export type NomeMascara = keyof typeof MASCARAS;

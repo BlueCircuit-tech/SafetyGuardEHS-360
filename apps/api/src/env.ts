@@ -15,6 +15,14 @@ const envSchema = z.object({
   UPLOAD_DIR: z.string().default('./uploads'),
   UPLOAD_MAX_MB: z.coerce.number().positive().default(5),
   PUBLIC_API_URL: z.string().url().default('http://localhost:3333'),
+  /** Base do link gravado no QR Code das areas. */
+  PUBLIC_APP_URL: z.string().url().default('http://localhost:5173'),
+  /**
+   * Segredo de assinatura do JWT. Em producao **precisa** ser trocado —
+   * o valor padrao existe so para o ambiente de desenvolvimento subir.
+   */
+  JWT_SECRET: z.string().min(16, 'JWT_SECRET deve ter ao menos 16 caracteres.').default('desenvolvimento-safetyguard-trocar'),
+  JWT_EXPIRA_EM: z.string().default('12h'),
 });
 
 const resultado = envSchema.safeParse(process.env);

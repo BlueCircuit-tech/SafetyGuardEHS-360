@@ -1,4 +1,5 @@
 import { montarCabecalhoInstitucional, type EmpresaFormValues } from '@safetyguard/shared';
+import { Icone } from './Icone';
 import { urlAbsoluta } from '../lib/api';
 
 /**
@@ -12,7 +13,7 @@ export function PreviaInstitucional({ valores }: { valores: EmpresaFormValues })
   if (!preenchidoMinimo) {
     return (
       <div className="painel">
-        <h3>👁️ Como vai aparecer</h3>
+        <h3><Icone nome="olho" /> Como vai aparecer</h3>
         <p className="desc">
           Preencha a razao social e o nome fantasia para ver a previa do cabecalho de relatorios, da assinatura de
           e-mail e das notificacoes de WhatsApp.
@@ -30,7 +31,7 @@ export function PreviaInstitucional({ valores }: { valores: EmpresaFormValues })
 
   return (
     <div className="painel">
-      <h3>👁️ Como vai aparecer</h3>
+      <h3><Icone nome="olho" /> Como vai aparecer</h3>
       <p className="desc">
         Estes blocos sao gerados pela mesma funcao usada pela API — o que voce ve aqui e o que sai nos documentos.
       </p>
@@ -38,7 +39,7 @@ export function PreviaInstitucional({ valores }: { valores: EmpresaFormValues })
       <div className="previa-doc">
         <div className="cab" style={{ background: cabecalho.corSecundaria }}>
           <div className="logo">
-            {logo ? <img src={logo} alt="Logo da empresa" /> : <span aria-hidden="true">🦺</span>}
+            {logo ? <img src={logo} alt="Logo da empresa" /> : <span aria-hidden="true"><Icone nome="escudo" /></span>}
           </div>
           <div>
             <div className="nome" style={{ color: cabecalho.corPrimaria }}>
@@ -62,12 +63,12 @@ export function PreviaInstitucional({ valores }: { valores: EmpresaFormValues })
       </div>
 
       <div className="previa-canal">
-        <span className="canal-lbl">✉️ Assinatura de e-mail</span>
+        <span className="canal-lbl"><Icone nome="envelope" /> Assinatura de e-mail</span>
         {cabecalho.assinaturaEmail}
       </div>
 
       <div className="previa-canal whats">
-        <span className="canal-lbl">💬 Notificacao de WhatsApp</span>
+        <span className="canal-lbl"><Icone nome="mensagem" /> Notificacao de WhatsApp</span>
         {cabecalho.cabecalhoWhatsapp}
         {'\n'}
         Plano de acao PA-2031 aberto — criticidade Alta, prazo 24h.

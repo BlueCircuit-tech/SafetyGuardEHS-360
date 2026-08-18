@@ -413,3 +413,499 @@ Atualização parcial e exclusão definitiva (o caminho normal é `situacao = EN
 ### `GET /api/v1/terceiros/:id/auditoria` · `POST`/`DELETE` `/api/v1/terceiros/:id/logo`
 
 Mesmo comportamento das etapas anteriores.
+
+---
+
+## Centros de Negócio / Unidades (Etapa 4)
+
+Campos e regras em [`etapa-04-centros-negocio.md`](etapa-04-centros-negocio.md).
+
+### `GET /api/v1/centros-negocio`
+
+Parâmetros: `busca`, `tipo`, `situacao`, `uf`, `ordenarPor`, `direcao`,
+`pagina`, `porPagina`. Cada item traz `quantidadeClientes`.
+
+### `GET /api/v1/centros-negocio/consolidado`
+
+Comparativo entre centros — base do filtro por centro nos dashboards.
+
+```json
+{
+  "centros": [
+    {
+      "codigo": "RCO",
+      "nome": "Regional Centro-Oeste",
+      "tipo": "REGIONAL",
+      "clientes": 2,
+      "clientesAtivos": 2,
+      "terceiros": 3,
+      "funcionariosCobertos": 1520,
+      "metaIndiceGlobal": 88
+    }
+  ],
+  "clientesSemCentro": 0
+}
+```
+
+### `GET /api/v1/centros-negocio/resumo`
+
+```json
+{ "total": 2, "ativos": 2, "inativos": 0, "clientesSemCentro": 0, "centrosSemClientes": 0 }
+```
+
+### `GET /api/v1/centros-negocio/opcoes?incluirInativos=false`
+
+Lista enxuta para os seletores do cadastro de cliente e dos dashboards.
+
+### `POST /api/v1/centros-negocio`
+
+```bash
+curl -X POST http://localhost:3333/api/v1/centros-negocio \
+  -H 'Content-Type: application/json' \
+  -H 'x-usuario: rafael@safetyguard.com.br' \
+  -d '{
+    "nome": "Regional Centro-Oeste",
+    "codigo": "RCO",
+    "tipo": "REGIONAL",
+    "responsavelNome": "Rafael Martini",
+    "responsavelEmail": "rafael.martini@safetyguard.com.br",
+    "cidade": "Goiania",
+    "uf": "GO",
+    "metaIndiceGlobal": 88
+  }'
+```
+
+O código é normalizado para maiúsculas (espaços viram hífen). Código repetido
+devolve `409 CODIGO_CENTRO_DUPLICADO`.
+
+### `DELETE /api/v1/centros-negocio/:id`
+
+`204` quando não há clientes vinculados. Caso contrário:
+
+```json
+{
+  "erro": {
+    "codigo": "CENTRO_COM_CLIENTES",
+    "mensagem": "Este centro tem 1 cliente(s) vinculado(s). Desvincule-os ou mude a situacao para Inativo.",
+    "detalhes": { "clientesVinculados": 1 }
+  }
+}
+```
+
+### `POST /api/v1/centros-negocio/:id/clientes`
+
+Vínculo em lote: `{ "clienteIds": ["<uuid>", "…"] }` → `{ "vinculados": 2 }`.
+
+### Reflexo em `/clientes`
+
+`GET /clientes` ganhou `centroNegocioId=<uuid>` e `semCentroNegocio=true`.
+A resposta de cliente passa a incluir:
+
+```json
+{ "centroNegocioId": "…", "centroNegocio": { "id": "…", "nome": "Regional Centro-Oeste", "codigo": "RCO", "corDestaque": "#059669" } }
+```
+
+---
+
+## Áreas e QR Code (Etapa 5)
+
+Campos e regras em [`etapa-05-areas-qrcode.md`](etapa-05-areas-qrcode.md).
+
+### `GET /api/v1/areas/qr/:token`
+
+Leitura do QR Code — primeiro passo do fluxo de campo.
+
+```json
+{
+  "nome": "Britagem — Planta 2",
+  "codigo": "BRT-P2",
+  "setor": "Planta 2",
+  "criticidade": "CRITICA",
+  "rotulos": { "tipo": "Producao", "criticidade": "Critica" },
+  "riscos": ["Ruido", "Poeira / particulados", "Maquinas e equipamentos"],
+  "exigePermissaoTrabalho": true,
+  "exigeAutorizacaoEntrada": true,
+  "urlInspecao": "http://localhost:5173/inspecao/WUHM47E7NT",
+  "urlQrCode": "http://localhost:3333/api/v1/areas/<id>/qrcode.svg",
+  "formatado": { "coordenadas": "-16.686400, -49.264300" },
+  "cliente": {
+    "nomeFantasia": "Vale Verde Mineracao",
+    "numeroContrato": "4501",
+    "centroNegocio": { "codigo": "RCO", "nome": "Regional Centro-Oeste" }
+  }
+}
+```
+
+Erros: `400 QR_INVALIDO` (token malformado — nem consulta o banco),
+`404 QR_NAO_RECONHECIDO`, `409 AREA_INATIVA`.
+
+### `GET /api/v1/areas/:id/qrcode.svg?escala=6`
+
+Devolve `image/svg+xml` com correção de erro nível M. Usado na tela e na folha
+de impressão.
+
+### `POST /api/v1/areas/:id/qrcode/regenerar`
+
+Emite um novo token. **Invalida as placas impressas** — ação explícita e
+auditada (`tokenQr: de → para` na trilha).
+
+### `GET /api/v1/areas`
+
+Filtros: `busca` (nome, código, setor, riscos, ponto de referência ou token),
+`clienteId`, `centroNegocioId`, `tipo`, `criticidade`, `situacao`, `ordenarPor`,
+`direcao`, `pagina`, `porPagina` (máx. 200).
+
+`centroNegocioId` atravessa o cliente — filtro em cascata centro → cliente → área.
+
+### `GET /api/v1/areas/resumo?clienteId=`
+
+```json
+{ "total": 8, "ativas": 8, "inativas": 0, "criticas": 4, "altas": 2, "comPermissaoTrabalho": 5 }
+```
+
+### `POST /api/v1/areas`
+
+```bash
+curl -X POST http://localhost:3333/api/v1/areas \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "clienteId": "<uuid>",
+    "nome": "Britagem — Planta 2",
+    "codigo": "BRT-P2",
+    "setor": "Planta 2",
+    "tipo": "PRODUCAO",
+    "criticidade": "CRITICA",
+    "riscosPresentes": "Ruido; Poeira; Maquinas",
+    "exigePermissaoTrabalho": true,
+    "latitude": -16.6864,
+    "longitude": -49.2643,
+    "frequenciaInspecaoDias": 7
+  }'
+```
+
+O `tokenQr` é gerado pelo servidor e ignorado se enviado no payload.
+Código repetido no mesmo cliente devolve `409 CODIGO_AREA_DUPLICADO`.
+Latitude sem longitude (ou vice-versa) devolve `422`.
+
+---
+
+## Observações e indicadores BBS (Etapa 6)
+
+Campos e regras em [`etapa-06-observacoes-bbs.md`](etapa-06-observacoes-bbs.md).
+
+### `GET /api/v1/indicadores/bbs`
+
+Painel completo, calculado sobre as observações. Filtros: `clienteId`,
+`centroNegocioId`, `areaId`, `terceiroId`, `tipo`, `situacao`, `de`, `ate`,
+`meses` (1–24), `topCausas` (3–20).
+
+```json
+{
+  "bbs": {
+    "totalBbs": 531,
+    "totalRegistros": 545,
+    "ics": 81.9,
+    "ici": 4.5,
+    "classificacaoIcs": { "nivel": "BOM", "rotulo": "Bom", "emoji": "🟡" },
+    "distribuicao": [{ "rotulo": "Comportamento Seguro", "quantidade": 435, "percentual": 81.9 }]
+  },
+  "icsg": { "valor": 86.4, "pesoConsiderado": 60, "pilaresSemDados": ["PLANO_ACAO_CONCLUIDO", "INSPECOES_REALIZADAS", "TREINAMENTOS"] },
+  "pareto": {
+    "comportamentosInseguros": [{ "causa": "Nao utilizacao de EPI", "quantidade": 29, "percentual": 40.3, "acumulado": 40.3, "dentroDos80": true }],
+    "condicoesInseguras": [{ "causa": "Falta de sinalizacao", "quantidade": 9 }]
+  },
+  "tendencia": { "direcao": "MELHORANDO", "simbolo": "↓", "variacao": -60.9, "pontos": [{ "periodo": "Marco/26", "total": 23 }] },
+  "mapaCalor": [{ "area": "Subestacao eletrica (SUB-01)", "criticidade": "ALTA", "emoji": "🔴" }],
+  "piramideBird": { "base": 96, "totalOcorrencias": 7, "niveis": [{ "codigo": "B", "quantidade": 1, "razaoParaBase": 96 }] }
+}
+```
+
+### `POST /api/v1/observacoes`
+
+Aceita `areaId` **ou** `tokenQr` (o do QR Code da área).
+
+```bash
+curl -X POST http://localhost:3333/api/v1/observacoes \
+  -H 'Content-Type: application/json' \
+  -H 'x-usuario: rafael@safetyguard.com.br' \
+  -d '{
+    "tokenQr": "WUHM47E7NT",
+    "tipo": "CONDICAO_INSEGURA",
+    "causaId": "<uuid>",
+    "descricao": "Guarda-corpo da passarela solto no acesso ao transportador.",
+    "observador": "Rafael Martini",
+    "severidade": 5, "probabilidade": 4, "exposicao": 3, "frequencia": 2,
+    "fotoUrl": "/arquivos/evidencia.png",
+    "acaoImediata": "Area isolada."
+  }'
+```
+
+A resposta traz o risco e a comunicação já resolvidos:
+
+```json
+{
+  "iir": 120,
+  "faixaIir": { "rotulo": "Critico" },
+  "grauRisco": "I",
+  "comunicacao": {
+    "acao": "Isolar area",
+    "email": true,
+    "whatsapp": "OBRIGATORIO",
+    "prazoRotulo": "Imediato",
+    "destinatarios": ["SUPERVISOR", "COORDENADOR", "SSMA", "MANUTENCAO"]
+  },
+  "escalonamento": { "rotuloNivel": "Supervisor", "vencida": false },
+  "prazoLimite": "2026-08-17T20:23:50.306Z"
+}
+```
+
+Validações de `422`: desvio sem `causaId`; condição insegura ou não conformidade
+sem `fotoUrl`; fatores de risco preenchidos pela metade; meia coordenada de GPS;
+`classificacaoBird = ATOS_E_CONDICOES`; data no futuro.
+`409 TERCEIRO_FORA_DO_CLIENTE` quando o terceiro não atua no cliente da área.
+
+### `GET /api/v1/observacoes` · `/resumo` · `/tipos`
+
+`/tipos` devolve os 5 tipos com as regras de cada um (`exigeFoto`,
+`exigeCausa`, `contaNoBbs`) — é o que o formulário de campo consome.
+
+### `GET` / `POST` `/api/v1/causas`
+
+Catálogo do Pareto. `GET /causas?tipo=CONDICAO_INSEGURA`.
+
+### `POST /api/v1/observacoes/:id/foto` · `/assinatura`
+
+`multipart/form-data`, campo `arquivo`.
+
+---
+
+## Planos de ação e notificações (Etapa 7)
+
+Campos e regras em [`etapa-07-planos-acao.md`](etapa-07-planos-acao.md).
+
+### `POST /api/v1/observacoes/:id/plano-acao`
+
+Abre o plano com ação, criticidade, prazo e destinatários derivados da matriz de
+comunicação, e registra as notificações na mesma transação.
+
+```json
+{
+  "codigo": "PA-0074",
+  "acao": "Isolar area",
+  "criticidade": "CRITICA",
+  "prazo": "2026-08-17T20:36:48.035Z",
+  "atrasado": true,
+  "nivelAtual": "Supervisor",
+  "rotulos": { "origem": "Observacao de campo" }
+}
+```
+
+`409 TIPO_NAO_ABRE_PLANO` para comportamento seguro e melhoria.
+`409 PLANO_JA_ABERTO` quando a observação já tem plano em aberto (traz o código).
+
+### `GET /api/v1/planos-acao/resumo`
+
+```json
+{
+  "abertos": 4, "emAndamento": 5, "concluidos": 65,
+  "atrasados": 6, "escalonados": 5,
+  "tempoMedioFechamentoDias": 4.8, "aderenciaAoPrazo": 80, "percentualConcluido": 87.8
+}
+```
+
+### `GET /api/v1/planos-acao/por-criticidade`
+
+```json
+[{ "criticidade": "CRITICA", "prazoPadraoHoras": 0, "total": 7, "emAberto": 2, "atrasados": 2, "concluidos": 5 }]
+```
+
+### `POST /api/v1/planos-acao/escalonar`
+
+Varre os planos vencidos e sobe de nível. **Idempotente.**
+
+```json
+{ "avaliados": 6, "escalonados": [{ "codigo": "PA-0070", "de": 1, "para": 3, "nivel": "Gerencia Corporativa" }] }
+```
+
+### `PUT /api/v1/planos-acao/:id`
+
+Concluir sem `evidenciaUrl` nem `comentarioConclusao` devolve `422`.
+Concluir sem `dataConclusao` carimba o momento atual.
+
+### `GET /api/v1/notificacoes` · `/notificacoes/resumo`
+
+Log das mensagens montadas, com `assunto`, `corpo`, `destinatarios`, `canal`,
+`nivelEscalonamento` e `status` (`SIMULADA` enquanto não há provedor).
+
+```json
+{ "total": 4, "email": 2, "whatsapp": 2, "simuladas": 4, "enviadas": 0, "falhas": 0, "porEscalonamento": 2 }
+```
+
+---
+
+## Autenticação e usuários (Etapa 8)
+
+**Toda rota exige `Authorization: Bearer <token>`**, exceto: `GET /health`,
+`POST /api/v1/auth/login`, `GET /api/v1/auth/perfis` e
+`GET /api/v1/areas/qr/:token` (tela de campo — o token do QR é a credencial).
+
+Campos e regras em [`etapa-08-pessoas-acessos.md`](etapa-08-pessoas-acessos.md).
+
+### `POST /api/v1/auth/login`
+
+```bash
+curl -X POST http://localhost:3333/api/v1/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"admin@safetyguard.com.br","senha":"SafetyGuard2026"}'
+```
+
+```json
+{
+  "token": "eyJhbGciOi…",
+  "usuario": {
+    "id": "…", "nome": "Administrador SafetyGuard", "perfil": "ADMIN",
+    "clienteId": null,
+    "permissoes": ["cadastros:ler", "cadastros:escrever", "…"]
+  }
+}
+```
+
+E-mail inexistente, senha errada e usuário inativo devolvem a **mesma**
+mensagem (`401 NAO_AUTENTICADO`, "E-mail ou senha invalidos.").
+
+### `GET /api/v1/auth/eu` · `GET /api/v1/auth/perfis` · `POST /api/v1/auth/trocar-senha`
+
+`/auth/eu` devolve a sessão atual. `/auth/perfis` lista os perfis com suas
+permissões e se exigem vínculo com cliente.
+
+### `GET` / `POST` / `PUT` / `DELETE` `/api/v1/usuarios`
+
+Exigem `usuarios:gerenciar`. `senhaHash` nunca aparece nas respostas.
+
+Erros próprios: `409 EMAIL_DUPLICADO`, `400 AUTO_ALTERACAO_PERFIL`,
+`400 AUTO_DESATIVACAO`, `400 AUTO_EXCLUSAO`.
+
+### Erros de acesso
+
+| Código | HTTP | Quando |
+| --- | :-: | --- |
+| `NAO_AUTENTICADO` | 401 | Sem token, token inválido/expirado, usuário inativo |
+| `SEM_PERMISSAO` | 403 | Perfil sem a permissão exigida (o campo `detalhes.permissao` diz qual) |
+
+---
+
+## Saúde ocupacional e documentos (Etapa 9)
+
+Cadastros exigem `saude:ler` / `saude:escrever`; o painel exige `indicadores:ler`.
+Campos e regras em [`etapa-09-saude-documentos.md`](etapa-09-saude-documentos.md).
+
+### `GET /api/v1/colaboradores`
+
+Filtros: `busca`, `clienteId`, `terceiroId`, `areaId`, `vinculo`, `grauRisco`,
+`situacao`, `asoIrregular`, `ordenarPor`, `direcao`, `pagina`, `porPagina`.
+
+Cada item traz a situação derivada do exame:
+
+```json
+{
+  "nome": "Adriana Peixoto", "cpfFormatado": "100.000.000-19",
+  "funcao": "Operador de ponte rolante", "grauRisco": "ALTO",
+  "asoAtual": { "tipo": "PERIODICO", "validade": "2026-06-02", "resultado": "APTO" },
+  "situacaoAso": "VENCIDO", "diasParaVencerAso": -77, "impedido": true
+}
+```
+
+`situacaoAso` é `VIGENTE` · `A_VENCER` · `VENCIDO` · `SEM_VALIDADE` · `SEM_ASO`.
+
+### `POST /api/v1/asos`
+
+`validade` em branco é calculada pela periodicidade do grau de risco
+(alto = 12 meses; demais = 24). Demissional não aceita validade e marca o
+colaborador como desligado.
+
+Erros próprios: `409 CPF_DUPLICADO`, `409 COLABORADOR_COM_HISTORICO`,
+`400 EXAME_ANTES_DA_ADMISSAO`, `400 TERCEIRO_DE_OUTRO_CLIENTE`,
+`400 AREA_DE_OUTRO_CLIENTE`, `400 ALVO_DE_OUTRO_CLIENTE`, `400 DOCUMENTO_NAO_ATIVO`.
+
+### `GET /api/v1/documentos` · `GET /api/v1/documentos/catalogo`
+
+O catálogo devolve os 15 tipos com `validadeMeses`, `exigeResponsavelTecnico` e
+`categoria`. `POST /documentos/:id/revisao` cria a nova versão e marca a anterior
+como `SUBSTITUIDO`.
+
+### `GET /api/v1/conformidade`
+
+```json
+{
+  "icl": { "valor": 78.6, "saude": 72.7, "documentos": 87.5, "pesoConsiderado": 100 },
+  "saude": { "colaboradoresAtivos": 22, "impedidos": 6, "semAso": 2, "percentualConformidade": 72.7 },
+  "documentos": { "total": 24, "vencidos": 3, "percentualConformidade": 87.5, "porTipo": [] },
+  "renovacao": { "janelaDias": 90, "total": 15, "vencidos": 7, "criticos": 0, "itens": [] },
+  "porCliente": []
+}
+```
+
+Parâmetros: `clienteId`, `terceiroId`, `janelaDias` (1–365, padrão 90).
+`GET /api/v1/conformidade/renovacoes` devolve só a fila.
+
+### Anexos
+
+`POST /asos/:id/arquivo` e `POST /documentos/:id/arquivo` aceitam
+**PDF, PNG, JPG ou WEBP** em `multipart/form-data` no campo `arquivo`.
+Upload de logo e evidência continua aceitando só imagem.
+
+---
+
+## Dashboards consolidados (Etapa 10)
+
+Três recortes da mesma base. Parâmetros comuns: `clienteId`, `centroNegocioId`,
+`meses` (1–36, padrão 12). Detalhes em
+[`etapa-10-dashboards.md`](etapa-10-dashboards.md).
+
+| Rota | Permissão |
+| --- | --- |
+| `GET /api/v1/dashboards/executivo` | `indicadores:ler` |
+| `GET /api/v1/dashboards/gerencial` | `indicadores:ler` |
+| `GET /api/v1/dashboards/operacional` | `planos:ler` |
+
+### `GET /api/v1/dashboards/executivo`
+
+```json
+{
+  "indiceGlobal": { "valor": 94.1, "pesoConsiderado": 80, "pilares": [], "pilaresSemDados": [] },
+  "cobertura": {
+    "pesoConsiderado": 80,
+    "pilaresSemDados": [{ "pilar": "AUDITORIAS", "motivo": "Modulo de auditorias ainda nao implementado." }]
+  },
+  "maturidade": { "valor": 85.2 },
+  "seguranca": {
+    "nota": 99.3, "acidentes": 4, "quaseAcidentes": 3, "registros": 546,
+    "observacao": "Proxy pela piramide de Bird. A Taxa de Frequencia exige homem-hora trabalhada."
+  },
+  "riscos": { "nota": 100, "totalAreas": 8, "emDia": 8, "atrasadas": 0, "nuncaInspecionadas": 0 },
+  "conformidade": { "icl": 78.6, "impedidos": 6, "documentosVencidos": 3 },
+  "ranking": [], "centros": [], "tendencia": {}, "piramideBird": {}, "carteira": {}
+}
+```
+
+`cobertura.pilaresSemDados` é a parte que **não** aparece no número: cada pilar
+sem fonte vem com o motivo. `seguranca.observacao` declara que a nota é um proxy.
+
+### `GET /api/v1/dashboards/gerencial`
+
+ICSG, `pareto` (comportamentos e condições), `mapaCalor`, `piramideBird`,
+`planos`, `inspecoes` (com `linhas` por área) e `terceiros` com a nota de cada
+contratada.
+
+### `GET /api/v1/dashboards/operacional`
+
+```json
+{
+  "fila": {
+    "planosAtrasados": 6, "planosVencendo": 2, "escalonamentosPendentes": 0,
+    "observacoesSemTratativa": 1, "areasSemInspecao": 0,
+    "colaboradoresImpedidos": 6, "renovacoesEm30Dias": 12
+  },
+  "planos": [], "observacoes": [], "areasAtrasadas": [], "renovacoes": [], "impedidos": []
+}
+```

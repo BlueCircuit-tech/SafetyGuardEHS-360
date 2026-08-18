@@ -75,6 +75,10 @@ export const COR_DESTAQUE_PADRAO = '#2563eb';
  * dashboards e escopo das inspecoes, planos de acao e documentos.
  */
 const clienteBaseSchema = z.object({
+  /* --- Agrupamento -------------------------------------------------------- */
+  /** Centro de negocio (regional, unidade ou tipo de contrato) ao qual pertence. */
+  centroNegocioId: opcional(z.string().uuid('Centro de negocio invalido.')),
+
   /* --- Identificacao ----------------------------------------------------- */
   razaoSocial: texto(3, 150, 'Razao social'),
   nomeFantasia: texto(2, 120, 'Nome fantasia'),
@@ -216,6 +220,9 @@ export const clienteFiltroSchema = z.object({
   situacao: z.enum(SITUACOES_CONTRATO).optional(),
   grauRisco: z.coerce.number().int().min(1).max(4).optional(),
   uf: z.string().trim().toUpperCase().length(2).optional(),
+  centroNegocioId: z.string().uuid('Centro de negocio invalido.').optional(),
+  /** `true` = so clientes ainda sem centro de negocio. */
+  semCentroNegocio: z.enum(['true', 'false']).optional(),
   ordenarPor: z.enum(ORDENACOES_CLIENTE).default('nomeFantasia'),
   direcao: z.enum(['asc', 'desc']).default('asc'),
   pagina: z.coerce.number().int().min(1).default(1),

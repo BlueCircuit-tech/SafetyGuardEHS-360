@@ -65,6 +65,123 @@ enum TipoVinculoTerceiro {
   SERVICO_EVENTUAL
 }
 
+/// Como o centro de negocio agrupa a operacao.
+enum TipoCentroNegocio {
+  REGIONAL
+  UNIDADE
+  TIPO_CONTRATO
+  DIVISAO
+}
+
+enum SituacaoCentro {
+  ATIVO
+  INATIVO
+}
+
+/// Natureza da area de inspecao.
+enum TipoArea {
+  PRODUCAO
+  MANUTENCAO
+  ARMAZENAGEM
+  LOGISTICA
+  UTILIDADES
+  LABORATORIO
+  OBRA
+  ADMINISTRATIVO
+  AREA_EXTERNA
+  OUTRO
+}
+
+/// Criticidade cadastral da area — orienta prioridade e frequencia de inspecao.
+enum CriticidadeArea {
+  BAIXA
+  MEDIA
+  ALTA
+  CRITICA
+}
+
+enum SituacaoArea {
+  ATIVA
+  INATIVA
+}
+
+/// Tipo escolhido pelo inspetor logo apos ler o QR Code.
+enum TipoObservacao {
+  COMPORTAMENTO_SEGURO
+  COMPORTAMENTO_INSEGURO
+  CONDICAO_INSEGURA
+  MELHORIA_IDENTIFICADA
+  NAO_CONFORMIDADE
+}
+
+enum SituacaoObservacao {
+  REGISTRADA
+  EM_TRATATIVA
+  CONCLUIDA
+  CANCELADA
+}
+
+/// Classificacao da Piramide de Bird.
+enum ClassificacaoBird {
+  A_MAJOR
+  B_SERIOUS
+  C_MINOR
+  D_MAJOR_NEAR_MISS
+  E_NEAR_MISS
+  F_FIRST_AID
+}
+
+/// Grau de risco da ocorrencia, usado pela matriz de comunicacao.
+enum GrauRiscoOcorrencia {
+  I
+  II
+  III
+}
+
+enum OrigemPlano {
+  OBSERVACAO
+  AUDITORIA
+  INSPECAO
+  MANUAL
+}
+
+enum CriticidadePlano {
+  BAIXA
+  MEDIA
+  ALTA
+  CRITICA
+}
+
+enum StatusPlano {
+  ABERTO
+  EM_ANDAMENTO
+  CONCLUIDO
+  CANCELADO
+}
+
+enum CanalNotificacao {
+  EMAIL
+  WHATSAPP
+}
+
+/// SIMULADA = mensagem montada e registrada, sem provedor acionado.
+enum StatusNotificacao {
+  SIMULADA
+  ENVIADA
+  FALHOU
+}
+
+/// Perfis de acesso — Diretoria, Gerencia, Supervisao, Tecnicos e Clientes.
+enum Perfil {
+  ADMIN
+  DIRETORIA
+  GERENTE
+  COORDENADOR
+  SUPERVISOR
+  TECNICO
+  CLIENTE
+}
+
 /// Empresa de consultoria — matriz do sistema.
 ///
 /// Primeiro cadastro da plataforma. Alimenta o cabecalho dos relatorios, a
@@ -108,13 +225,13 @@ model EmpresaConsultoria {
   uf          String  @db.Char(2)
 
   // --- Responsavel tecnico (assina laudos e auditorias) -------------------
-  responsavelTecnicoNome          String         @db.VarChar(120)
-  responsavelTecnicoCargo         String?        @db.VarChar(80)
-  responsavelTecnicoTipoRegistro  TipoRegistroRt
-  responsavelTecnicoRegistro      String         @db.VarChar(40)
-  responsavelTecnicoUfRegistro    String?        @db.Char(2)
-  responsavelTecnicoEmail         String?        @db.VarChar(150)
-  responsavelTecnicoTelefone      String?        @db.VarChar(11)
+  responsavelTecnicoNome         String         @db.VarChar(120)
+  responsavelTecnicoCargo        String?        @db.VarChar(80)
+  responsavelTecnicoTipoRegistro TipoRegistroRt
+  responsavelTecnicoRegistro     String         @db.VarChar(40)
+  responsavelTecnicoUfRegistro   String?        @db.Char(2)
+  responsavelTecnicoEmail        String?        @db.VarChar(150)
+  responsavelTecnicoTelefone     String?        @db.VarChar(11)
 
   // --- Identidade visual e textos institucionais --------------------------
   logoUrl           String? @db.VarChar(300)
@@ -134,7 +251,8 @@ model EmpresaConsultoria {
   criadoEm     DateTime @default(now())
   atualizadoEm DateTime @updatedAt
 
-  clientes Cliente[]
+  clientes         Cliente[]
+  centrosDeNegocio CentroNegocio[]
 
   @@map("empresa_consultoria")
 }
@@ -148,6 +266,11 @@ model Cliente {
   id        String             @id @default(uuid())
   empresaId String
   empresa   EmpresaConsultoria @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+
+  /// Centro de negocio (regional, unidade ou tipo de contrato) ao qual pertence.
+  /// `Restrict`: um centro com clientes vinculados nao pode ser excluido.
+  centroNegocioId String?
+  centroNegocio   CentroNegocio? @relation(fields: [centroNegocioId], references: [id], onDelete: Restrict)
 
   // --- Identificacao ------------------------------------------------------
   razaoSocial        String        @db.VarChar(150)
@@ -206,13 +329,67 @@ model Cliente {
   criadoEm     DateTime @default(now())
   atualizadoEm DateTime @updatedAt
 
-  terceiros Terceiro[]
+  terceiros          Terceiro[]
+  areas              Area[]
+  observacoesDeCampo Observacao[]
+  planosDeAcao       PlanoAcao[]
+  colaboradores      Colaborador[]
+  documentos         DocumentoSsma[]
+  notificacoes       Notificacao[]
+  usuarios           Usuario[]
 
   @@unique([empresaId, cnpj])
   @@unique([empresaId, numeroContrato])
   @@index([empresaId, situacao])
   @@index([empresaId, nomeFantasia])
+  @@index([centroNegocioId])
   @@map("cliente")
+}
+
+/// Centro de negocio / unidade — Etapa 4.
+///
+/// Agrupamento intermediario entre a matriz e os clientes, usado quando a
+/// consultoria organiza a operacao por regional, por unidade ou por tipo de
+/// contrato. E um dos filtros transversais dos dashboards.
+model CentroNegocio {
+  id        String             @id @default(uuid())
+  empresaId String
+  empresa   EmpresaConsultoria @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+
+  // --- Identificacao ------------------------------------------------------
+  nome      String            @db.VarChar(120)
+  /// Codigo curto usado em relatorios, filtros e exportacoes.
+  codigo    String            @db.VarChar(20)
+  tipo      TipoCentroNegocio
+  descricao String?           @db.VarChar(500)
+
+  // --- Responsavel ---------------------------------------------------------
+  responsavelNome     String  @db.VarChar(120)
+  responsavelCargo    String? @db.VarChar(80)
+  responsavelEmail    String  @db.VarChar(150)
+  responsavelTelefone String? @db.VarChar(11)
+  responsavelWhatsapp String? @db.VarChar(11)
+
+  // --- Localizacao de referencia ------------------------------------------
+  cidade String? @db.VarChar(80)
+  uf     String? @db.Char(2)
+
+  // --- Gestao --------------------------------------------------------------
+  /// Meta do Indice Global SSMA do centro.
+  metaIndiceGlobal Decimal        @default(85) @db.Decimal(5, 2)
+  situacao         SituacaoCentro @default(ATIVO)
+  corDestaque      String         @default("#0e1a2b") @db.VarChar(7)
+  observacoes      String?        @db.VarChar(1000)
+
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  clientes Cliente[]
+
+  @@unique([empresaId, codigo])
+  @@index([empresaId, situacao])
+  @@index([empresaId, nome])
+  @@map("centro_negocio")
 }
 
 /// Empresa contratada / terceiro — Etapa 3.
@@ -229,15 +406,15 @@ model Terceiro {
   cliente   Cliente @relation(fields: [clienteId], references: [id], onDelete: Cascade)
 
   // --- Identificacao ------------------------------------------------------
-  razaoSocial       String        @db.VarChar(150)
-  nomeFantasia      String        @db.VarChar(120)
+  razaoSocial        String        @db.VarChar(150)
+  nomeFantasia       String        @db.VarChar(120)
   /// Somente digitos/letras, sem mascara. Aceita CNPJ alfanumerico (2026+).
-  cnpj              String        @db.VarChar(14)
-  inscricaoEstadual String?       @db.VarChar(20)
-  cnaePrincipal     String?       @db.VarChar(7)
-  porte             PorteEmpresa?
+  cnpj               String        @db.VarChar(14)
+  inscricaoEstadual  String?       @db.VarChar(20)
+  cnaePrincipal      String?       @db.VarChar(7)
+  porte              PorteEmpresa?
   /// O que o terceiro executa na operacao.
-  atividadePrincipal String       @db.VarChar(120)
+  atividadePrincipal String        @db.VarChar(120)
 
   // --- Atuacao na operacao do cliente -------------------------------------
   tipoVinculo            TipoVinculoTerceiro @default(CONTRATO)
@@ -289,11 +466,289 @@ model Terceiro {
   criadoEm     DateTime @default(now())
   atualizadoEm DateTime @updatedAt
 
+  observacoesDeCampo Observacao[]
+  planosDeAcao       PlanoAcao[]
+  colaboradores      Colaborador[]
+  documentos         DocumentoSsma[]
+
   @@unique([clienteId, cnpj])
   @@index([clienteId, situacao])
   @@index([clienteId, nomeFantasia])
   @@index([notaSsma])
   @@map("terceiro")
+}
+
+/// Area de inspecao — Etapa 5.
+///
+/// Ponto de leitura da inspecao de campo: cada area tem um QR Code proprio
+/// que abre o formulario de observacao ja identificado com cliente, area e
+/// riscos esperados.
+model Area {
+  id        String  @id @default(uuid())
+  clienteId String
+  cliente   Cliente @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+
+  /// Agrupamento livre dentro do cliente (planta, unidade, predio).
+  setor String? @db.VarChar(80)
+
+  // --- Identificacao ------------------------------------------------------
+  nome      String   @db.VarChar(120)
+  /// Codigo curto impresso na placa do QR Code. Unico por cliente.
+  codigo    String   @db.VarChar(20)
+  tipo      TipoArea
+  descricao String?  @db.VarChar(500)
+
+  // --- QR Code -------------------------------------------------------------
+  /// Token gravado no QR. Gerado pelo servidor e estavel: reimprimir a placa
+  /// nao invalida as leituras anteriores.
+  tokenQr String @unique @db.VarChar(16)
+
+  // --- Risco ---------------------------------------------------------------
+  criticidade             CriticidadeArea
+  /// Riscos presentes, separados por ponto e virgula.
+  riscosPresentes         String?         @db.VarChar(300)
+  exigeAutorizacaoEntrada Boolean         @default(false)
+  exigePermissaoTrabalho  Boolean         @default(false)
+
+  // --- Responsavel pela area -----------------------------------------------
+  responsavelNome     String? @db.VarChar(120)
+  responsavelCargo    String? @db.VarChar(80)
+  responsavelEmail    String? @db.VarChar(150)
+  responsavelTelefone String? @db.VarChar(11)
+
+  // --- Localizacao fisica --------------------------------------------------
+  latitude        Decimal? @db.Decimal(10, 7)
+  longitude       Decimal? @db.Decimal(10, 7)
+  pontoReferencia String?  @db.VarChar(150)
+
+  // --- Inspecao ------------------------------------------------------------
+  /// Periodicidade minima de inspecao, em dias.
+  frequenciaInspecaoDias Int          @default(30)
+  situacao               SituacaoArea @default(ATIVA)
+  observacoes            String?      @db.VarChar(1000)
+
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  observacoesDeCampo Observacao[]
+  planosDeAcao       PlanoAcao[]
+  colaboradores      Colaborador[]
+  documentos         DocumentoSsma[]
+
+  @@unique([clienteId, codigo])
+  @@index([clienteId, situacao])
+  @@index([clienteId, criticidade])
+  @@map("area")
+}
+
+/// Catalogo de causas de desvio — base do Pareto.
+///
+/// As causas sao catalogadas, e nao texto livre, porque o Pareto so faz
+/// sentido se "Nao utilizacao de EPI" for sempre a mesma coisa.
+model CausaDesvio {
+  id                   String         @id @default(uuid())
+  codigo               String         @unique @db.VarChar(20)
+  descricao            String         @db.VarChar(120)
+  tipo                 TipoObservacao
+  /// Setor que costuma resolver — alimenta o roteamento da comunicacao.
+  destinatarioSugerido String?        @db.VarChar(60)
+  ativa                Boolean        @default(true)
+
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  observacoes Observacao[]
+
+  @@index([tipo, ativa])
+  @@map("causa_desvio")
+}
+
+/// Observacao de campo — Etapa 6.
+///
+/// Evento que alimenta todos os indicadores (ICS, ICI, Pareto, tendencia,
+/// mapa de calor, Piramide de Bird) e dispara a matriz de comunicacao.
+model Observacao {
+  id String @id @default(uuid())
+
+  areaId String
+  area   Area   @relation(fields: [areaId], references: [id], onDelete: Restrict)
+
+  /// Derivado da area pelo servidor — evita join em toda agregacao.
+  clienteId String
+  cliente   Cliente @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+
+  /// Terceiro envolvido, quando o desvio e de uma contratada.
+  terceiroId String?
+  terceiro   Terceiro? @relation(fields: [terceiroId], references: [id], onDelete: SetNull)
+
+  causaId String?
+  causa   CausaDesvio? @relation(fields: [causaId], references: [id], onDelete: Restrict)
+
+  // --- Classificacao --------------------------------------------------------
+  dataHora   DateTime       @default(now())
+  tipo       TipoObservacao
+  descricao  String         @db.VarChar(1000)
+  observador String         @db.VarChar(120)
+
+  // --- Avaliacao de risco ----------------------------------------------------
+  severidade    Int?
+  probabilidade Int?
+  exposicao     Int?
+  frequencia    Int?
+  /// IIR = severidade x probabilidade x exposicao x frequencia. Calculado no servidor.
+  iir           Int?
+  /// Derivado do IIR; define prazo e destinatarios na matriz de comunicacao.
+  grauRisco     GrauRiscoOcorrencia?
+
+  classificacaoBird ClassificacaoBird?
+
+  // --- Evidencias -------------------------------------------------------------
+  fotoUrl       String?  @db.VarChar(300)
+  assinaturaUrl String?  @db.VarChar(300)
+  latitude      Decimal? @db.Decimal(10, 7)
+  longitude     Decimal? @db.Decimal(10, 7)
+
+  // --- Tratativa --------------------------------------------------------------
+  acaoImediata String?            @db.VarChar(500)
+  situacao     SituacaoObservacao @default(REGISTRADA)
+  observacoes  String?            @db.VarChar(1000)
+  /// Prazo calculado pela matriz de comunicacao no momento do registro.
+  prazoLimite  DateTime?
+
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  planosDeAcao PlanoAcao[]
+  notificacoes Notificacao[]
+
+  @@index([clienteId, dataHora])
+  @@index([clienteId, tipo, dataHora])
+  @@index([areaId, dataHora])
+  @@index([terceiroId, dataHora])
+  @@index([causaId])
+  @@map("observacao")
+}
+
+/// Plano de acao — Etapa 7.
+///
+/// A tratativa da ocorrencia. Nasce automaticamente da observacao quando o tipo
+/// exige, com prazo e criticidade vindos da matriz de comunicacao.
+model PlanoAcao {
+  id     String @id @default(uuid())
+  /// Identificador legivel (PA-0001), usado em relatorios e mensagens.
+  codigo String @unique @db.VarChar(20)
+
+  origem OrigemPlano @default(MANUAL)
+
+  observacaoId String?
+  observacao   Observacao? @relation(fields: [observacaoId], references: [id], onDelete: SetNull)
+
+  /// Derivado da observacao/area pelo servidor.
+  clienteId String
+  cliente   Cliente @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+
+  areaId String?
+  area   Area?   @relation(fields: [areaId], references: [id], onDelete: SetNull)
+
+  terceiroId String?
+  terceiro   Terceiro? @relation(fields: [terceiroId], references: [id], onDelete: SetNull)
+
+  // --- O que fazer ---------------------------------------------------------
+  acao      String  @db.VarChar(300)
+  descricao String? @db.VarChar(1000)
+
+  // --- Quem e quando --------------------------------------------------------
+  responsavelNome  String           @db.VarChar(120)
+  responsavelCargo String?          @db.VarChar(80)
+  responsavelEmail String?          @db.VarChar(150)
+  criticidade      CriticidadePlano
+  prazo            DateTime
+
+  // --- Andamento -------------------------------------------------------------
+  status              StatusPlano @default(ABERTO)
+  dataConclusao       DateTime?
+  evidenciaUrl        String?     @db.VarChar(300)
+  comentarioConclusao String?     @db.VarChar(1000)
+  observacoes         String?     @db.VarChar(1000)
+
+  // --- Escalonamento ---------------------------------------------------------
+  /// Degrau ja acionado: 0 Supervisor, 1 Coordenador, 2 Gerente, 3 Corporativa.
+  nivelEscalonamento      Int       @default(0)
+  dataUltimoEscalonamento DateTime?
+
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  notificacoes Notificacao[]
+
+  @@index([clienteId, status, prazo])
+  @@index([clienteId, criticidade])
+  @@index([status, prazo])
+  @@map("plano_acao")
+}
+
+/// Registro de notificacao — o "Dashboard de Comunicacao" do plano diretor.
+///
+/// Guarda a mensagem exatamente como foi montada, com destinatarios e canal.
+/// Enquanto nao ha provedor, o status e SIMULADA: da rastreabilidade e permite
+/// auditar o que *seria* enviado.
+model Notificacao {
+  id String @id @default(uuid())
+
+  planoAcaoId String?
+  planoAcao   PlanoAcao? @relation(fields: [planoAcaoId], references: [id], onDelete: Cascade)
+
+  observacaoId String?
+  observacao   Observacao? @relation(fields: [observacaoId], references: [id], onDelete: Cascade)
+
+  clienteId String
+  cliente   Cliente @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+
+  canal              CanalNotificacao
+  /// Papeis acionados, separados por virgula (SUPERVISOR,COORDENADOR).
+  destinatarios      String            @db.VarChar(300)
+  assunto            String?           @db.VarChar(200)
+  corpo              String            @db.Text
+  /// Degrau do escalonamento que gerou esta notificacao.
+  nivelEscalonamento Int               @default(0)
+  status             StatusNotificacao @default(SIMULADA)
+  erro               String?           @db.VarChar(300)
+
+  criadoEm DateTime @default(now())
+
+  @@index([clienteId, criadoEm])
+  @@index([planoAcaoId])
+  @@map("notificacao")
+}
+
+/// Usuario da plataforma — Etapa 8.
+///
+/// A senha e guardada como hash scrypt com sal por usuario; o texto puro nunca
+/// e persistido nem registrado em log ou auditoria.
+model Usuario {
+  id    String @id @default(uuid())
+  nome  String @db.VarChar(120)
+  email String @unique @db.VarChar(150)
+
+  /// Formato: scrypt$<sal-hex>$<hash-hex>.
+  senhaHash String @db.VarChar(300)
+
+  perfil   Perfil
+  cargo    String? @db.VarChar(80)
+  telefone String? @db.VarChar(11)
+
+  /// Restringe o acesso a um unico cliente (perfil CLIENTE).
+  clienteId String?
+  cliente   Cliente? @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+
+  ativo        Boolean   @default(true)
+  ultimoAcesso DateTime?
+
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  @@index([perfil, ativo])
+  @@map("usuario")
 }
 
 /// Trilha de auditoria — obrigatoria em sistemas de SSMA para provar
@@ -311,4 +766,214 @@ model RegistroAuditoria {
 
   @@index([entidade, entidadeId, criadoEm])
   @@map("registro_auditoria")
+}
+
+/**
+ * ==========================================================================
+ * Etapa 9 — Saude ocupacional e documentacao legal
+ * ==========================================================================
+ */
+
+enum VinculoColaborador {
+  /// Empregado proprio do cliente.
+  CLIENTE
+  /// Empregado de uma empresa contratada.
+  TERCEIRO
+  /// Equipe da propria consultoria.
+  CONSULTORIA
+}
+
+enum SituacaoColaborador {
+  ATIVO
+  AFASTADO
+  DESLIGADO
+}
+
+/// Grau de risco da funcao (NR-4) — define a periodicidade do exame periodico.
+enum GrauRiscoFuncao {
+  BAIXO
+  MEDIO
+  ALTO
+}
+
+/// Tipos de exame previstos na NR-7.
+enum TipoAso {
+  ADMISSIONAL
+  PERIODICO
+  RETORNO_AO_TRABALHO
+  MUDANCA_DE_RISCO
+  DEMISSIONAL
+}
+
+enum ResultadoAso {
+  APTO
+  APTO_COM_RESTRICAO
+  INAPTO
+}
+
+enum TipoDocumento {
+  PGR
+  PCMSO
+  LTCAT
+  PPP
+  PCA
+  PPR
+  LAUDO_INSALUBRIDADE
+  LAUDO_PERICULOSIDADE
+  LAUDO_ERGONOMICO
+  AVCB
+  LICENCA_AMBIENTAL
+  ART_RT
+  CERTIFICADO_TREINAMENTO
+  PROCEDIMENTO
+  OUTRO
+}
+
+/// A que o documento se aplica.
+enum AbrangenciaDocumento {
+  CLIENTE
+  AREA
+  TERCEIRO
+  COLABORADOR
+}
+
+enum SituacaoDocumento {
+  ATIVO
+  SUBSTITUIDO
+  CANCELADO
+}
+
+/// Pessoa que trabalha na operacao — sujeito do ASO e do PPP.
+///
+/// O CPF e unico por cliente, e nao global: a mesma pessoa pode prestar
+/// servico em contratos diferentes, com funcao e grau de risco proprios.
+model Colaborador {
+  id        String  @id @default(uuid())
+  clienteId String
+  cliente   Cliente @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+
+  vinculo    VinculoColaborador
+  /// Obrigatorio quando o vinculo e TERCEIRO — e quem responde pelo ASO.
+  terceiroId String?
+  terceiro   Terceiro?          @relation(fields: [terceiroId], references: [id], onDelete: SetNull)
+  /// Area de lotacao, quando aplicavel.
+  areaId     String?
+  area       Area?              @relation(fields: [areaId], references: [id], onDelete: SetNull)
+
+  // --- Identificacao --------------------------------------------------------
+  nome           String    @db.VarChar(120)
+  cpf            String    @db.VarChar(11)
+  matricula      String?   @db.VarChar(30)
+  dataNascimento DateTime? @db.Date
+
+  // --- Trabalho -------------------------------------------------------------
+  funcao             String          @db.VarChar(80)
+  setor              String?         @db.VarChar(80)
+  grauRisco          GrauRiscoFuncao @default(MEDIO)
+  /// Riscos ocupacionais da funcao, separados por ponto e virgula.
+  riscosOcupacionais String?         @db.VarChar(300)
+  dataAdmissao       DateTime?       @db.Date
+  dataDesligamento   DateTime?       @db.Date
+
+  // --- Contato --------------------------------------------------------------
+  email    String? @db.VarChar(150)
+  telefone String? @db.VarChar(11)
+
+  situacao    SituacaoColaborador @default(ATIVO)
+  observacoes String?             @db.VarChar(1000)
+
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  asos       Aso[]
+  documentos DocumentoSsma[]
+
+  @@unique([clienteId, cpf])
+  @@index([clienteId, situacao])
+  @@index([terceiroId])
+  @@map("colaborador")
+}
+
+/// Atestado de Saude Ocupacional (NR-7).
+///
+/// O historico e preservado: um novo periodico nao apaga o anterior, porque a
+/// fiscalizacao pede a sequencia completa de exames.
+model Aso {
+  id            String      @id @default(uuid())
+  colaboradorId String
+  colaborador   Colaborador @relation(fields: [colaboradorId], references: [id], onDelete: Cascade)
+
+  tipo      TipoAso
+  dataExame DateTime  @db.Date
+  /// Nulo no demissional, que nao gera proximo periodico.
+  validade  DateTime? @db.Date
+
+  resultado  ResultadoAso
+  /// Obrigatoria quando ha restricao ou inaptidao.
+  restricoes String?      @db.VarChar(500)
+
+  // --- Medico examinador ----------------------------------------------------
+  medicoNome        String  @db.VarChar(120)
+  medicoCrm         String  @db.VarChar(20)
+  /// Coordenador do PCMSO, quando diferente do examinador.
+  medicoCoordenador String? @db.VarChar(120)
+
+  // --- Conteudo -------------------------------------------------------------
+  riscosAvaliados      String? @db.VarChar(300)
+  examesComplementares String? @db.VarChar(500)
+  observacoes          String? @db.VarChar(1000)
+  /// Digitalizacao do atestado.
+  arquivoUrl           String? @db.VarChar(300)
+
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  @@index([colaboradorId, dataExame])
+  @@index([validade])
+  @@map("aso")
+}
+
+/// Documento legal SSMA: programas, laudos, licencas e certificados.
+model DocumentoSsma {
+  id        String  @id @default(uuid())
+  clienteId String
+  cliente   Cliente @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+
+  abrangencia   AbrangenciaDocumento
+  areaId        String?
+  area          Area?                @relation(fields: [areaId], references: [id], onDelete: SetNull)
+  terceiroId    String?
+  terceiro      Terceiro?            @relation(fields: [terceiroId], references: [id], onDelete: SetNull)
+  colaboradorId String?
+  colaborador   Colaborador?         @relation(fields: [colaboradorId], references: [id], onDelete: SetNull)
+
+  // --- Identificacao --------------------------------------------------------
+  tipo      TipoDocumento
+  titulo    String        @db.VarChar(150)
+  numero    String?       @db.VarChar(50)
+  revisao   String?       @db.VarChar(20)
+  descricao String?       @db.VarChar(1000)
+
+  // --- Vigencia -------------------------------------------------------------
+  dataEmissao DateTime  @db.Date
+  /// Nulo em documentos sem prazo (PPP, procedimento).
+  validade    DateTime? @db.Date
+
+  // --- Responsavel tecnico --------------------------------------------------
+  responsavelNome     String? @db.VarChar(120)
+  /// Registro profissional: CREA, CRM, CRT...
+  responsavelRegistro String? @db.VarChar(40)
+  numeroArt           String? @db.VarChar(40)
+
+  situacao    SituacaoDocumento @default(ATIVO)
+  observacoes String?           @db.VarChar(1000)
+  arquivoUrl  String?           @db.VarChar(300)
+
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  @@index([clienteId, situacao])
+  @@index([clienteId, tipo])
+  @@index([validade])
+  @@map("documento_ssma")
 }

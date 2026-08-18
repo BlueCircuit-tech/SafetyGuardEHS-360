@@ -1,6 +1,19 @@
 import type { FastifyInstance } from 'fastify';
 import {
   ATIVIDADES_TERCEIRO_SUGERIDAS,
+  CRITICIDADES_AREA_CADASTRO,
+  FREQUENCIA_SUGERIDA_POR_CRITICIDADE,
+  RISCOS_SUGERIDOS,
+  ROTULO_CRITICIDADE_AREA,
+  ROTULO_SITUACAO_AREA,
+  ROTULO_TIPO_AREA,
+  SITUACOES_AREA,
+  TIPOS_AREA,
+  DESCRICAO_TIPO_CENTRO,
+  ROTULO_SITUACAO_CENTRO,
+  ROTULO_TIPO_CENTRO,
+  SITUACOES_CENTRO,
+  TIPOS_CENTRO_NEGOCIO,
   CNAES_SUGERIDOS,
   FAIXAS_CLASSIFICACAO,
   DESCRICAO_GRAU_RISCO,
@@ -58,6 +71,20 @@ export async function rotasReferencias(app: FastifyInstance): Promise<void> {
     tiposVinculoTerceiro: TIPOS_VINCULO_TERCEIRO.map((valor) => ({ valor, rotulo: ROTULO_VINCULO_TERCEIRO[valor] })),
     atividadesTerceiro: ATIVIDADES_TERCEIRO_SUGERIDAS,
     faixasClassificacao: FAIXAS_CLASSIFICACAO,
+    tiposCentroNegocio: TIPOS_CENTRO_NEGOCIO.map((valor) => ({
+      valor,
+      rotulo: ROTULO_TIPO_CENTRO[valor],
+      descricao: DESCRICAO_TIPO_CENTRO[valor],
+    })),
+    situacoesCentro: SITUACOES_CENTRO.map((valor) => ({ valor, rotulo: ROTULO_SITUACAO_CENTRO[valor] })),
+    tiposArea: TIPOS_AREA.map((valor) => ({ valor, rotulo: ROTULO_TIPO_AREA[valor] })),
+    criticidadesArea: CRITICIDADES_AREA_CADASTRO.map((valor) => ({
+      valor,
+      rotulo: ROTULO_CRITICIDADE_AREA[valor],
+      frequenciaSugeridaDias: FREQUENCIA_SUGERIDA_POR_CRITICIDADE[valor],
+    })),
+    situacoesArea: SITUACOES_AREA.map((valor) => ({ valor, rotulo: ROTULO_SITUACAO_AREA[valor] })),
+    riscosSugeridos: RISCOS_SUGERIDOS,
   }));
 
   /**

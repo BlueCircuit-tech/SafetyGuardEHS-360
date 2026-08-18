@@ -110,7 +110,7 @@ usada pela API e pela prévia do formulário — uma implementação só.
 "sem avaliação" e é contado em `resumo.semAvaliacao`. Na ordenação por nota, os
 não avaliados vão para o fim (`nulls: 'last'`), nunca para o topo.
 
-> **Estado atual da nota.** Enquanto as inspeções (Etapa 6) não existem, `notaSsma`
+> **Estado atual da nota.** Enquanto as inspeções (Etapa 7) não existem, `notaSsma`
 > é lançada manualmente no cadastro. Quando os eventos de campo entrarem, o campo
 > passa a ser calculado e o formulário deixa de aceitar edição direta. A estrutura
 > de ranking, faixas e alertas já está pronta para essa troca.
@@ -175,9 +175,9 @@ atividade), `clienteId`, `situacao`, `grauRisco`, `classificacao` (A–D),
 
 ## O que vem depois
 
-- **Etapa 4 — Unidades e Áreas:** as áreas do cliente onde o terceiro atua deixam
+- **Etapa 5 — Áreas e QR Code:** as áreas do cliente onde o terceiro atua deixam
   de ser texto livre (`areasAtuacao`) e viram vínculo real, com QR Code.
-- **Etapa 6 — Inspeções:** cada observação passa a apontar para o terceiro
+- **Etapa 7 — Inspeções:** cada observação passa a apontar para o terceiro
   responsável, e a `notaSsma` deixa de ser manual.
 - **Controle de acesso:** `pendenciaDocumental` e `situacao = BLOQUEADO` são os
   campos que a liberação de entrada vai consultar.

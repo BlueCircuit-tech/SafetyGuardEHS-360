@@ -25,6 +25,8 @@ function montarWhere(empresaId: string, filtro: ClienteFiltro): Prisma.ClienteWh
   if (filtro.situacao) where.situacao = filtro.situacao;
   if (filtro.grauRisco) where.grauRisco = filtro.grauRisco;
   if (filtro.uf) where.uf = filtro.uf;
+  if (filtro.centroNegocioId) where.centroNegocioId = filtro.centroNegocioId;
+  if (filtro.semCentroNegocio === 'true') where.centroNegocioId = null;
 
   const busca = filtro.busca?.trim();
   if (busca) {
@@ -52,6 +54,7 @@ export async function listarClientes(filtro: ClienteFiltro): Promise<PaginaClien
       orderBy: { [filtro.ordenarPor]: filtro.direcao },
       skip: (filtro.pagina - 1) * filtro.porPagina,
       take: filtro.porPagina,
+      include: { centroNegocio: { select: { id: true, nome: true, codigo: true, corDestaque: true } } },
     }),
   ]);
 
@@ -65,7 +68,10 @@ export async function listarClientes(filtro: ClienteFiltro): Promise<PaginaClien
 }
 
 export async function obterClienteOuFalhar(id: string): Promise<Cliente> {
-  const cliente = await prisma.cliente.findUnique({ where: { id } });
+  const cliente = await prisma.cliente.findUnique({
+    where: { id },
+    include: { centroNegocio: { select: { id: true, nome: true, codigo: true, corDestaque: true } } },
+  });
   if (!cliente) throw new NaoEncontrado('Cliente nao encontrado.', 'CLIENTE_NAO_ENCONTRADO');
   return cliente;
 }

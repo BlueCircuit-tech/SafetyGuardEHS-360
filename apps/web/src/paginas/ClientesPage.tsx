@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Icone } from '../componentes/Icone';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { ROTULO_PORTE, ROTULO_SITUACAO, SITUACOES_CONTRATO, type PorteEmpresa, type SituacaoContrato } from '@safetyguard/shared';
 import { Campo } from '../componentes/Campo';
 import { useToast } from '../componentes/Toast';
@@ -31,9 +32,16 @@ function vigenciaTexto(cliente: ClienteApi): string {
   return `${inicio} → ${formatarDataIso(cliente.dataFimContrato)}`;
 }
 
+interface OpcaoCentro {
+  id: string;
+  nome: string;
+  codigo: string;
+}
+
 export function ClientesPage() {
   const { mostrar } = useToast();
   const navegar = useNavigate();
+  const [parametrosUrl] = useSearchParams();
 
   const [carregando, setCarregando] = useState(true);
   const [semMatriz, setSemMatriz] = useState(false);
@@ -44,7 +52,18 @@ export function ClientesPage() {
   const [buscaAplicada, setBuscaAplicada] = useState('');
   const [situacao, setSituacao] = useState<SituacaoContrato | ''>('');
   const [grauRisco, setGrauRisco] = useState('');
+  const [centros, setCentros] = useState<OpcaoCentro[]>([]);
+  // Atalhos vindos da tela de centros: ?centro=<id> e ?semCentro=1
+  const [centroId, setCentroId] = useState(parametrosUrl.get('centro') ?? '');
+  const [semCentro, setSemCentro] = useState(parametrosUrl.get('semCentro') === '1');
   const [numeroPagina, setNumeroPagina] = useState(1);
+
+  useEffect(() => {
+    api
+      .get<OpcaoCentro[]>('/centros-negocio/opcoes?incluirInativos=true')
+      .then(setCentros)
+      .catch(() => setCentros([]));
+  }, []);
 
   // Debounce da busca para não disparar uma requisição por tecla.
   useEffect(() => {
@@ -63,8 +82,10 @@ export function ClientesPage() {
     if (buscaAplicada) parametros.set('busca', buscaAplicada);
     if (situacao) parametros.set('situacao', situacao);
     if (grauRisco) parametros.set('grauRisco', grauRisco);
+    if (semCentro) parametros.set('semCentroNegocio', 'true');
+    else if (centroId) parametros.set('centroNegocioId', centroId);
     return parametros.toString();
-  }, [buscaAplicada, situacao, grauRisco, numeroPagina]);
+  }, [buscaAplicada, situacao, grauRisco, centroId, semCentro, numeroPagina]);
 
   const carregar = useCallback(async () => {
     setCarregando(true);
@@ -118,8 +139,8 @@ export function ClientesPage() {
         </div>
         <div className="painel">
           <div className="vazio">
-            <div className="icone" aria-hidden="true">
-              🏢
+            <div className="icone-vazio" aria-hidden="true">
+              <Icone nome="predio" tamanho={22} />
             </div>
             <h4>Conclua a Etapa 1.1 primeiro</h4>
             <p>
@@ -136,7 +157,7 @@ export function ClientesPage() {
   }
 
   const itens = pagina?.itens ?? [];
-  const temFiltro = Boolean(buscaAplicada || situacao || grauRisco);
+  const temFiltro = Boolean(buscaAplicada || situacao || grauRisco || centroId || semCentro);
 
   return (
     <>
@@ -231,6 +252,27 @@ export function ClientesPage() {
               ))}
             </select>
           </Campo>
+          <Campo label="Centro de negócio" htmlFor="filtro-centro">
+            <select
+              id="filtro-centro"
+              value={semCentro ? '__sem__' : centroId}
+              onChange={(evento) => {
+                const valor = evento.target.value;
+                setSemCentro(valor === '__sem__');
+                setCentroId(valor === '__sem__' ? '' : valor);
+                setNumeroPagina(1);
+              }}
+              style={{ width: 210 }}
+            >
+              <option value="">Todos</option>
+              {centros.map((centro) => (
+                <option key={centro.id} value={centro.id}>
+                  {centro.nome} ({centro.codigo})
+                </option>
+              ))}
+              <option value="__sem__">— Sem centro —</option>
+            </select>
+          </Campo>
           {temFiltro ? (
             <button
               type="button"
@@ -240,6 +282,8 @@ export function ClientesPage() {
                 setBusca('');
                 setSituacao('');
                 setGrauRisco('');
+                setCentroId('');
+                setSemCentro(false);
                 setNumeroPagina(1);
               }}
             >
@@ -255,8 +299,8 @@ export function ClientesPage() {
           </div>
         ) : itens.length === 0 ? (
           <div className="vazio">
-            <div className="icone" aria-hidden="true">
-              {temFiltro ? '🔍' : '🤝'}
+            <div className="icone-vazio" aria-hidden="true">
+              <Icone nome="lupa" tamanho={22} />
             </div>
             <h4>{temFiltro ? 'Nenhum cliente encontrado' : 'Nenhum cliente cadastrado ainda'}</h4>
             <p>
@@ -277,6 +321,7 @@ export function ClientesPage() {
                 <thead>
                   <tr>
                     <th>Cliente</th>
+                    <th>Centro</th>
                     <th>CNPJ</th>
                     <th>Contrato</th>
                     <th>Segmento</th>
@@ -299,6 +344,15 @@ export function ClientesPage() {
                         <div className="secundario">
                           {cliente.cidade}/{cliente.uf}
                         </div>
+                      </td>
+                      <td>
+                        {cliente.centroNegocio ? (
+                          <Link to={`/centros-negocio/${cliente.centroNegocio.id}`}>
+                            <code>{cliente.centroNegocio.codigo}</code>
+                          </Link>
+                        ) : (
+                          <span style={{ color: 'var(--gray)' }}>—</span>
+                        )}
                       </td>
                       <td>{cliente.formatado.cnpj}</td>
                       <td>

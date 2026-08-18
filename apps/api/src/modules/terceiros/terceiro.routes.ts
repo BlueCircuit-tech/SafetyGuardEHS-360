@@ -1,4 +1,4 @@
-import type { FastifyInstance, FastifyRequest } from 'fastify';
+import type { FastifyInstance } from 'fastify';
 import type { Terceiro } from '@prisma/client';
 import { z } from 'zod';
 import {
@@ -25,20 +25,13 @@ import {
 } from './terceiro.service.js';
 import { MIMES_IMAGEM_ACEITOS, removerArquivoPublico, salvarImagem } from '../../lib/arquivos.js';
 import { RequisicaoInvalida } from '../../lib/erros.js';
+import { contextoDeAuditoria } from '../../lib/autenticacao.js';
+import { guardaPorMetodo } from '../../lib/guarda.js';
 import { uploadMaxBytes } from '../../env.js';
-import type { ContextoAuditoria } from '../../lib/auditoria.js';
 
 const paramsSchema = z.object({ id: z.string().uuid('Identificador de terceiro invalido.') });
 
 const MS_POR_DIA = 24 * 60 * 60 * 1000;
-
-function contextoDaRequisicao(request: FastifyRequest): ContextoAuditoria {
-  const cabecalho = request.headers['x-usuario'];
-  return {
-    autor: (Array.isArray(cabecalho) ? cabecalho[0] : cabecalho) ?? 'sistema',
-    ip: request.ip,
-  };
-}
 
 function diasAte(data: Date | null): number | null {
   return data === null ? null : Math.ceil((data.getTime() - Date.now()) / MS_POR_DIA);
@@ -83,6 +76,8 @@ function serializar(terceiro: Terceiro) {
 }
 
 export async function rotasTerceiros(app: FastifyInstance): Promise<void> {
+  app.addHook('preHandler', guardaPorMetodo(app, { leitura: 'cadastros:ler', escrita: 'cadastros:escrever' }));
+
   app.get('/terceiros/resumo', async (request) => {
     const { clienteId } = z.object({ clienteId: z.string().uuid().optional() }).parse(request.query);
     return resumoTerceiros(clienteId);
@@ -136,7 +131,7 @@ export async function rotasTerceiros(app: FastifyInstance): Promise<void> {
 
   app.post('/terceiros', async (request, reply) => {
     const dados = terceiroCreateSchema.parse(request.body);
-    const terceiro = await criarTerceiro(dados, contextoDaRequisicao(request));
+    const terceiro = await criarTerceiro(dados, contextoDeAuditoria(request));
     return reply.status(201).send(serializar(terceiro));
   });
 
@@ -148,12 +143,12 @@ export async function rotasTerceiros(app: FastifyInstance): Promise<void> {
       throw new RequisicaoInvalida('Nenhum campo enviado para atualizacao.', 'PAYLOAD_VAZIO');
     }
 
-    return serializar(await atualizarTerceiro(id, dados, contextoDaRequisicao(request)));
+    return serializar(await atualizarTerceiro(id, dados, contextoDeAuditoria(request)));
   });
 
   app.delete('/terceiros/:id', async (request, reply) => {
     const { id } = paramsSchema.parse(request.params);
-    await excluirTerceiro(id, contextoDaRequisicao(request));
+    await excluirTerceiro(id, contextoDeAuditoria(request));
     return reply.status(204).send();
   });
 
@@ -180,7 +175,7 @@ export async function rotasTerceiros(app: FastifyInstance): Promise<void> {
 
     const conteudo = await arquivo.toBuffer();
     const logoUrl = await salvarImagem(conteudo, arquivo.mimetype, 'terceiro');
-    const atualizado = await definirLogoTerceiro(id, logoUrl, contextoDaRequisicao(request));
+    const atualizado = await definirLogoTerceiro(id, logoUrl, contextoDeAuditoria(request));
 
     await removerArquivoPublico(terceiro.logoUrl);
 
@@ -190,7 +185,7 @@ export async function rotasTerceiros(app: FastifyInstance): Promise<void> {
   app.delete('/terceiros/:id/logo', async (request) => {
     const { id } = paramsSchema.parse(request.params);
     const terceiro = await obterTerceiroOuFalhar(id);
-    const atualizado = await definirLogoTerceiro(id, null, contextoDaRequisicao(request));
+    const atualizado = await definirLogoTerceiro(id, null, contextoDeAuditoria(request));
     await removerArquivoPublico(terceiro.logoUrl);
     return serializar(atualizado);
   });

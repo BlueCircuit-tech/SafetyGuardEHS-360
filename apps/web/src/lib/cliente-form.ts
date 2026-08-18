@@ -12,6 +12,8 @@ import {
 export interface ClienteApi {
   id: string;
   empresaId: string;
+  centroNegocioId: string | null;
+  centroNegocio?: { id: string; nome: string; codigo: string; corDestaque: string } | null;
   razaoSocial: string;
   nomeFantasia: string;
   cnpj: string;
@@ -80,6 +82,7 @@ export interface ResumoClientes {
 }
 
 export const VALORES_INICIAIS_CLIENTE: ClienteFormValues = {
+  centroNegocioId: '',
   razaoSocial: '',
   nomeFantasia: '',
   cnpj: '',
@@ -125,6 +128,7 @@ const texto = (valor: string | number | null | undefined): string =>
 /** Converte o registro da API nos valores mascarados do formulario. */
 export function clienteParaFormulario(cliente: ClienteApi): ClienteFormValues {
   return {
+    centroNegocioId: texto(cliente.centroNegocioId),
     razaoSocial: cliente.razaoSocial,
     nomeFantasia: cliente.nomeFantasia,
     cnpj: formatarCnpj(cliente.cnpj),

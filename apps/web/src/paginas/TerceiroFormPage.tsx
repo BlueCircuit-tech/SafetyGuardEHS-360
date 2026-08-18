@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Icone } from '../componentes/Icone';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useForm, type Path, type Resolver } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -285,7 +286,7 @@ export function TerceiroFormPage() {
 
       {aba === 'historico' ? (
         <div className="painel">
-          <h3>🧾 Trilha de auditoria</h3>
+          <h3><Icone nome="documento" /> Trilha de auditoria</h3>
           <p className="desc">Quem alterou o quê e quando, desde a criação do cadastro.</p>
           <div className="tbl-wrap">
             <table className="tbl">
@@ -338,7 +339,7 @@ export function TerceiroFormPage() {
             <div>
               {/* -------------------------------------------- vínculo --- */}
               <section className="painel">
-                <h3>🔗 Onde atua</h3>
+                <h3><Icone nome="link" /> Onde atua</h3>
                 <p className="desc">O terceiro sempre pertence à operação de um cliente contratante.</p>
 
                 <Campo
@@ -401,7 +402,7 @@ export function TerceiroFormPage() {
 
               {/* -------------------------------------- identificação --- */}
               <section className="painel">
-                <h3>🏭 Identificação</h3>
+                <h3><Icone nome="fabrica" /> Identificação</h3>
                 <p className="desc">Dados cadastrais da empresa terceirizada.</p>
 
                 <Campo label="Razão social" obrigatorio erro={erro('razaoSocial')}>
@@ -467,7 +468,7 @@ export function TerceiroFormPage() {
 
               {/* ----------------------------- desempenho / ranking ----- */}
               <section className="painel">
-                <h3>🏆 Desempenho SSMA</h3>
+                <h3><Icone nome="premio" /> Desempenho SSMA</h3>
                 <p className="desc">
                   A nota posiciona o terceiro no ranking. Enquanto as inspeções não existem, ela é lançada aqui; depois
                   passa a ser calculada a partir dos eventos de campo.
@@ -518,7 +519,7 @@ export function TerceiroFormPage() {
 
               {/* ------------------------------------- documentação ----- */}
               <section className="painel">
-                <h3>📋 Documentação e conformidade</h3>
+                <h3><Icone nome="documento" /> Documentação e conformidade</h3>
                 <p className="desc">
                   Pendência aqui bloqueia a liberação de acesso à área do cliente.
                 </p>
@@ -545,7 +546,7 @@ export function TerceiroFormPage() {
 
               {/* --------------------------------------- responsável ---- */}
               <section className="painel">
-                <h3>👤 Preposto / responsável</h3>
+                <h3><Icone nome="pessoa" /> Preposto / responsável</h3>
                 <p className="desc">Quem responde pelo terceiro dentro da operação e recebe as notificações.</p>
 
                 <div className="row2">
@@ -581,7 +582,7 @@ export function TerceiroFormPage() {
 
               {/* ------------------------------------------ endereço ---- */}
               <section className="painel">
-                <h3>📍 Endereço da sede</h3>
+                <h3><Icone nome="local" /> Endereço da sede</h3>
                 <p className="desc">Opcional — mas, se preencher, complete o bloco inteiro.</p>
 
                 <div className="row-cep">
@@ -636,13 +637,13 @@ export function TerceiroFormPage() {
 
               {/* ----------------------------------------- identidade --- */}
               <section className="painel" style={{ paddingBottom: 0 }}>
-                <h3>🎨 Identidade e anotações</h3>
+                <h3><Icone nome="paleta" /> Identidade e anotações</h3>
 
                 <div className="row2">
                   <Campo label="Logo" ajuda="PNG, JPG, WEBP ou SVG — até 5 MB.">
                     <div className="logo-box">
                       <div className="logo-preview">
-                        {logoAtual ? <img src={logoAtual} alt="Logo do terceiro" /> : <span aria-hidden="true">🛠️</span>}
+                        {logoAtual ? <img src={logoAtual} alt="Logo do terceiro" /> : <span aria-hidden="true"><Icone nome="ferramenta" /></span>}
                       </div>
                       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                         <input
@@ -681,7 +682,7 @@ export function TerceiroFormPage() {
                   <textarea {...register('observacoes')} placeholder="Pendências, restrições de acesso, histórico de ocorrências." />
                 </Campo>
 
-                <div className="barra-acoes" style={{ marginLeft: -18, marginRight: -18 }}>
+                <div className="barra-acoes rodape-form">
                   <span className="aviso">
                     {modoEdicao
                       ? isDirty
@@ -711,13 +712,13 @@ export function TerceiroFormPage() {
 
             <aside className="coluna-previa">
               <div className="painel">
-                <h3>📊 Posição no ranking</h3>
+                <h3><Icone nome="grafico" /> Posição no ranking</h3>
                 <p className="desc">Como este terceiro aparece no comparativo de desempenho.</p>
 
                 <div className="previa-doc">
                   <div className="cab" style={{ background: 'var(--navy)' }}>
                     <div className="logo">
-                      {logoAtual ? <img src={logoAtual} alt="" /> : <span aria-hidden="true">🛠️</span>}
+                      {logoAtual ? <img src={logoAtual} alt="" /> : <span aria-hidden="true"><Icone nome="ferramenta" /></span>}
                     </div>
                     <div>
                       <div className="nome" style={{ color: valores.corDestaque || '#fff' }}>

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Icone } from '../componentes/Icone';
 import { Link, useNavigate } from 'react-router-dom';
 import {
   CLASSIFICACOES_SSMA,
@@ -139,8 +140,8 @@ export function TerceirosPage() {
         </div>
         <div className="painel">
           <div className="vazio">
-            <div className="icone" aria-hidden="true">
-              🏢
+            <div className="icone-vazio" aria-hidden="true">
+              <Icone nome="predio" tamanho={22} />
             </div>
             <h4>Conclua as etapas anteriores</h4>
             <p>Terceiros atuam dentro da operação de um cliente — é preciso ter a matriz e ao menos um cliente.</p>
@@ -180,7 +181,7 @@ export function TerceirosPage() {
 
       {semClientes ? (
         <div className="hint alerta">
-          ⚠️ Nenhum cliente cadastrado. Um terceiro sempre atua dentro da operação de um cliente —{' '}
+          <Icone nome="alerta" /> Nenhum cliente cadastrado. Um terceiro sempre atua dentro da operação de um cliente —{' '}
           <Link to="/clientes/novo">cadastre um cliente</Link> antes.
         </div>
       ) : null}
@@ -229,7 +230,7 @@ export function TerceirosPage() {
 
       {aba === 'ranking' ? (
         <div className="painel">
-          <h3>🏆 Ranking de desempenho SSMA</h3>
+          <h3><Icone nome="premio" /> Ranking de desempenho SSMA</h3>
           <p className="desc">
             Ordenado pela nota de desempenho. Terceiros ainda não avaliados não ocupam posição — aparecem como “sem
             avaliação” na aba de cadastro.
@@ -255,9 +256,9 @@ export function TerceirosPage() {
 
           {ranking.length === 0 ? (
             <div className="vazio">
-              <div className="icone" aria-hidden="true">
-                📊
-              </div>
+              <div className="icone-vazio" aria-hidden="true">
+              <Icone nome="grafico" tamanho={22} />
+            </div>
               <h4>Nenhum terceiro avaliado ainda</h4>
               <p>
                 Lance a nota SSMA no cadastro do terceiro para montar o ranking. Quando as inspeções entrarem, a nota
@@ -425,9 +426,9 @@ export function TerceirosPage() {
             </div>
           ) : itens.length === 0 ? (
             <div className="vazio">
-              <div className="icone" aria-hidden="true">
-                {temFiltro ? '🔍' : '🛠️'}
-              </div>
+              <div className="icone-vazio" aria-hidden="true">
+              <Icone nome="ferramenta" tamanho={22} />
+            </div>
               <h4>{temFiltro ? 'Nenhum terceiro encontrado' : 'Nenhum terceiro cadastrado ainda'}</h4>
               <p>
                 {temFiltro
