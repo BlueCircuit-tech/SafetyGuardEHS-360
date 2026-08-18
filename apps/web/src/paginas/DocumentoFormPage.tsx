@@ -44,6 +44,7 @@ const VALORES_INICIAIS: DocumentoFormValues = {
   areaId: '',
   terceiroId: '',
   colaboradorId: '',
+  observacaoId: '',
   tipo: 'PGR',
   titulo: '',
   numero: '',
@@ -65,6 +66,7 @@ function paraFormulario(documento: DocumentoApi): DocumentoFormValues {
     areaId: documento.areaId ?? '',
     terceiroId: documento.terceiroId ?? '',
     colaboradorId: documento.colaboradorId ?? '',
+    observacaoId: documento.observacaoId ?? '',
     tipo: documento.tipo,
     titulo: documento.titulo,
     numero: documento.numero ?? '',
@@ -100,6 +102,7 @@ export function DocumentoFormPage() {
   const [terceiros, setTerceiros] = useState<Opcao[]>([]);
   const [areas, setAreas] = useState<Opcao[]>([]);
   const [colaboradores, setColaboradores] = useState<Opcao[]>([]);
+  const [observacoes, setObservacoes] = useState<Array<{ id: string; descricao: string; dataHora: string }>>([]);
   const [aba, setAba] = useState<'cadastro' | 'historico'>('cadastro');
   const [auditoria, setAuditoria] = useState<RegistroAuditoria[]>([]);
 
@@ -149,6 +152,13 @@ export function DocumentoFormPage() {
       .get<Opcao[]>(`/colaboradores/opcoes?clienteId=${valores.clienteId}`)
       .then(setColaboradores)
       .catch(() => setColaboradores([]));
+
+    void api
+      .get<{ itens: Array<{ id: string; descricao: string; dataHora: string }> }>(
+        `/observacoes?clienteId=${valores.clienteId}&porPagina=100`,
+      )
+      .then((resposta) => setObservacoes(resposta.itens))
+      .catch(() => setObservacoes([]));
   }, [valores.clienteId]);
 
   const carregar = useCallback(async () => {
@@ -374,6 +384,25 @@ export function DocumentoFormPage() {
                   {terceiros.map((terceiro) => (
                     <option key={terceiro.id} value={terceiro.id}>
                       {terceiro.nomeFantasia}
+                    </option>
+                  ))}
+                </select>
+              </Campo>
+            ) : null}
+
+            {abrangencia === 'OCORRENCIA' ? (
+              <Campo
+                label="Ocorrência"
+                htmlFor="observacaoId"
+                obrigatorio
+                erro={errors.observacaoId?.message}
+                ajuda="APR, AST, PT ou FISPQ presa ao registro de campo."
+              >
+                <select id="observacaoId" {...register('observacaoId')}>
+                  <option value="">Selecione...</option>
+                  {observacoes.map((observacao) => (
+                    <option key={observacao.id} value={observacao.id}>
+                      {formatarDataIso(observacao.dataHora)} — {observacao.descricao.slice(0, 60)}
                     </option>
                   ))}
                 </select>

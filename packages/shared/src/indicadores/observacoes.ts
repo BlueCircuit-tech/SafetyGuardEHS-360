@@ -358,3 +358,40 @@ export function calcularTendencia(
     simbolo: direcao === 'MELHORANDO' ? '↓' : direcao === 'PIORANDO' ? '↑' : '→',
   };
 }
+
+/* -------------------------------------------------------------------------- */
+/* Score composto por area                                                     */
+/* -------------------------------------------------------------------------- */
+
+export interface EntradaScoreArea {
+  /** Desvios (comportamento + condicao insegura) nos ultimos 30 dias. */
+  desvios30Dias: number;
+  /** Ultima inspecao dentro da frequencia cadastrada da area. */
+  inspecaoEmDia: boolean;
+  /** Planos de acao em aberto na area. */
+  planosAbertos: number;
+}
+
+/**
+ * Nota composta da area (0-100) — secao 23 do plano diretor.
+ *
+ * **Convencao editavel**: parte de 100 e desconta 2 pontos por desvio no mes
+ * (teto 40), 20 pontos se a inspecao esta atrasada e 5 por plano em aberto
+ * (teto 30). Os pesos moram aqui, num lugar so, para a régua ser ajustada
+ * sem cacar numeros no codigo.
+ */
+export const SCORE_AREA = {
+  porDesvio: 2,
+  tetoDesvios: 40,
+  inspecaoAtrasada: 20,
+  porPlanoAberto: 5,
+  tetoPlanos: 30,
+} as const;
+
+export function calcularScoreArea(entrada: EntradaScoreArea): number {
+  const descontoDesvios = Math.min(SCORE_AREA.tetoDesvios, entrada.desvios30Dias * SCORE_AREA.porDesvio);
+  const descontoInspecao = entrada.inspecaoEmDia ? 0 : SCORE_AREA.inspecaoAtrasada;
+  const descontoPlanos = Math.min(SCORE_AREA.tetoPlanos, entrada.planosAbertos * SCORE_AREA.porPlanoAberto);
+
+  return Math.max(0, 100 - descontoDesvios - descontoInspecao - descontoPlanos);
+}

@@ -15,6 +15,7 @@ import { prisma } from '../../db.js';
 import { obterEmpresaOuFalhar } from '../empresa/empresa.service.js';
 import { montarWhere } from './observacao.service.js';
 import { resumoPlanos } from '../planos/plano.service.js';
+import { notaDeTreinamentos } from '../treinamentos/treinamento.service.js';
 
 /**
  * Painel BBS montado a partir das observacoes reais.
@@ -182,10 +183,13 @@ export async function painelBbs(filtro: IndicadoresFiltro) {
     terceiroId: filtro.terceiroId,
   });
 
+  const treinamentos = await notaDeTreinamentos({ clienteId: filtro.clienteId });
+
   const icsg = calcularIcsg({
     COMPORTAMENTOS_SEGUROS: bbs.totalBbs > 0 ? bbs.ics : null,
     CONDICOES_INSEGURAS: bbs.totalBbs > 0 ? bbs.ici : null,
     PLANO_ACAO_CONCLUIDO: planos.percentualConcluido,
+    TREINAMENTOS: treinamentos,
   });
 
   return {

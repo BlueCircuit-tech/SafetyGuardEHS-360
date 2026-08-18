@@ -2183,6 +2183,158 @@ a.stat:hover {
 }
 
 /* ==========================================================================
+   Folha do PPP — o documento em si (secao 17)
+   ========================================================================== */
+
+/*
+ * A tela ja e a folha: mesmas medidas e mesmas quebras na impressao. Largura
+ * em milimetros para o A4 sair igual ao que o tecnico ve.
+ */
+.folha-ppp {
+  background: var(--superficie);
+  border: 1px solid var(--borda);
+  border-radius: var(--raio);
+  padding: 26px 30px 30px;
+  max-width: 210mm;
+  margin: 0 auto;
+}
+
+.ppp-cabecalho {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 24px;
+  padding-bottom: 14px;
+  border-bottom: 2px solid var(--texto);
+}
+
+.ppp-cabecalho strong {
+  font-size: 15px;
+  letter-spacing: 0.01em;
+}
+
+.ppp-titulo {
+  text-align: right;
+}
+
+.ppp-titulo h1 {
+  font-size: 16px;
+  margin: 0 0 2px;
+  letter-spacing: 0.02em;
+}
+
+.ppp-aviso {
+  margin: 12px 0 4px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--texto-fraco);
+}
+
+.ppp-secao {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 22px 0 10px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--borda);
+  break-after: avoid;
+}
+
+.ppp-secao h2 {
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ppp-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  background: var(--texto);
+  color: var(--superficie);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.ppp-fonte {
+  font-size: 11px;
+  color: var(--texto-fraco);
+  white-space: nowrap;
+}
+
+.ppp-grade {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px 20px;
+}
+
+.ppp-dado {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.ppp-rotulo {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--texto-fraco);
+}
+
+.ppp-valor {
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.ppp-assinaturas {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 40px;
+  margin: 46px 0 0;
+  break-inside: avoid;
+}
+
+.ppp-linha-assinatura {
+  display: block;
+  border-top: 1px solid var(--texto);
+  margin-bottom: 6px;
+}
+
+.ppp-rodape {
+  margin-top: 28px;
+  padding-top: 10px;
+  border-top: 1px solid var(--borda);
+  font-size: 11px;
+  color: var(--texto-fraco);
+  text-align: center;
+}
+
+@media (max-width: 720px) {
+  .ppp-grade {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .ppp-cabecalho,
+  .ppp-assinaturas {
+    grid-template-columns: 1fr;
+    flex-direction: column;
+  }
+
+  .ppp-titulo {
+    text-align: left;
+  }
+}
+
+/* ==========================================================================
    Impressao
    ========================================================================== */
 
@@ -2218,6 +2370,24 @@ a.stat:hover {
     grid-template-columns: repeat(3, 1fr);
     gap: 10px;
   }
+
+  /* O PPP impresso perde a moldura, mantem as quebras. */
+  .folha-ppp {
+    border: none;
+    border-radius: 0;
+    padding: 0;
+    max-width: none;
+  }
+
+  .ppp-secao,
+  .tbl-wrap {
+    break-inside: avoid;
+  }
+}
+
+@page {
+  size: A4;
+  margin: 14mm;
 }
 
 /* ==========================================================================
@@ -2331,4 +2501,102 @@ a.stat:hover {
 .tbl th.num-col {
   text-align: right;
   font-variant-numeric: tabular-nums;
+}
+
+/* ==========================================================================
+   Medalhas de benchmark e linha do tempo
+   ========================================================================== */
+
+.medalha {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 30px;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  border: 1px solid transparent;
+}
+
+.medalha.ouro {
+  background: #fdf3d7;
+  color: #92600a;
+  border-color: #ecd9a0;
+}
+
+.medalha.prata {
+  background: #eef1f5;
+  color: #55636f;
+  border-color: #d5dce3;
+}
+
+.medalha.bronze {
+  background: #f7e8dd;
+  color: #8a4d24;
+  border-color: #e5c9b3;
+}
+
+/* Linha do tempo da ocorrencia (secao 32 do plano diretor). */
+.timeline {
+  position: relative;
+  padding-left: 26px;
+}
+
+.timeline::before {
+  content: '';
+  position: absolute;
+  left: 8px;
+  top: 6px;
+  bottom: 6px;
+  width: 2px;
+  background: var(--border);
+}
+
+.timeline-evento {
+  position: relative;
+  padding-bottom: 18px;
+}
+
+.timeline-evento:last-child {
+  padding-bottom: 0;
+}
+
+.timeline-evento::before {
+  content: '';
+  position: absolute;
+  left: -23px;
+  top: 4px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--superficie);
+  border: 3px solid var(--gray-suave);
+}
+
+.timeline-evento.registro::before { border-color: var(--navy); }
+.timeline-evento.comunicacao::before { border-color: var(--blue); }
+.timeline-evento.escalonamento::before { border-color: var(--red); }
+.timeline-evento.plano::before { border-color: var(--orange); }
+.timeline-evento.tratativa::before { border-color: var(--yellow); }
+.timeline-evento.evidencia::before { border-color: var(--purple); }
+.timeline-evento.encerramento::before { border-color: var(--green); }
+
+.timeline-quando {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--gray);
+}
+
+.timeline-titulo {
+  font-size: 13px;
+  font-weight: 650;
+  color: var(--navy);
+  margin: 1px 0;
+}
+
+.timeline-detalhe {
+  font-size: 12px;
+  color: var(--texto-medio);
+  line-height: 1.5;
 }

@@ -1345,6 +1345,442 @@ async function semearDocumentos(): Promise<void> {
   console.log(`Documentos criados: ${total}`);
 }
 
+
+/* ==========================================================================
+   Etapa 11 — Treinamentos e Matriz de Capacitacao
+   ========================================================================== */
+
+/** Requisitos por funcao — espelha as funcoes usadas em FUNCOES_DEMO. */
+const REQUISITOS_DEMO: Record<string, string[]> = {
+  'Operador de empilhadeira': ['NR-11 — Operacao de Empilhadeira', 'Integracao de Seguranca'],
+  'Soldador': ['NR-34 — Trabalho a Quente', 'NR-35 — Trabalho em Altura', 'Integracao de Seguranca'],
+  'Eletricista de manutencao': ['NR-10 — Seguranca em Instalacoes Eletricas (Basico)', 'NR-35 — Trabalho em Altura', 'Integracao de Seguranca'],
+  'Mecanico industrial': ['NR-12 — Seguranca em Maquinas e Equipamentos', 'Integracao de Seguranca'],
+  'Auxiliar de producao': ['Integracao de Seguranca'],
+  'Tecnico de laboratorio': ['Integracao de Seguranca'],
+  'Operador de ponte rolante': ['NR-11 — Operacao de Empilhadeira', 'NR-35 — Trabalho em Altura', 'Integracao de Seguranca'],
+  'Conferente de expedicao': ['Integracao de Seguranca'],
+  'Pintor industrial': ['NR-35 — Trabalho em Altura', 'NR-33 — Espaco Confinado (Trabalhador Autorizado)', 'Integracao de Seguranca'],
+};
+
+const INSTRUTORES_DEMO = ['SENAI Sao Paulo', 'Instrutor interno — SSMA', 'Consultoria TreinaSeg'];
+
+/**
+ * Catalogo, matriz e realizacoes.
+ *
+ * Distribuicao por posicao (nao sorteada): a matriz de demonstracao sempre
+ * nasce com em-dia, a-vencer, vencido e sem-treinamento — senao o painel
+ * nasce todo verde e nao mostra nada.
+ */
+async function semearTreinamentos(): Promise<void> {
+  const jaExiste = await prisma.treinamento.count();
+  if (jaExiste > 0) {
+    console.log(`Treinamentos ja cadastrados: ${jaExiste}.`);
+    return;
+  }
+
+  const { CATALOGO_TREINAMENTOS_SUGERIDO } = await import('@safetyguard/shared');
+
+  const idPorNome = new Map<string, string>();
+  for (const modelo of CATALOGO_TREINAMENTOS_SUGERIDO) {
+    const treinamento = await prisma.treinamento.create({
+      data: {
+        nome: modelo.nome,
+        norma: modelo.norma,
+        cargaHorariaHoras: modelo.cargaHorariaHoras,
+        validadeMeses: modelo.validadeMeses,
+      },
+      select: { id: true, nome: true },
+    });
+    idPorNome.set(treinamento.nome, treinamento.id);
+  }
+  console.log(`Catalogo de treinamentos: ${idPorNome.size}`);
+
+  let requisitos = 0;
+  for (const [funcao, nomes] of Object.entries(REQUISITOS_DEMO)) {
+    for (const nome of nomes) {
+      const treinamentoId = idPorNome.get(nome);
+      if (!treinamentoId) continue;
+      await prisma.requisitoCapacitacao.create({ data: { funcao, treinamentoId } });
+      requisitos += 1;
+    }
+  }
+  console.log(`Requisitos da matriz: ${requisitos}`);
+
+  const colaboradores = await prisma.colaborador.findMany({
+    where: { situacao: { not: 'DESLIGADO' } },
+    select: { id: true, funcao: true },
+  });
+
+  const catalogoPorId = new Map(
+    (await prisma.treinamento.findMany({ select: { id: true, validadeMeses: true } })).map((t) => [t.id, t]),
+  );
+
+  let realizacoes = 0;
+  const contagem = { emDia: 0, aVencer: 0, vencido: 0, sem: 0 };
+  let posicao = 0;
+
+  for (const colaborador of colaboradores) {
+    const exigidos = REQUISITOS_DEMO[colaborador.funcao] ?? [];
+
+    for (const nome of exigidos) {
+      const treinamentoId = idPorNome.get(nome);
+      if (!treinamentoId) continue;
+
+      const faixa = posicao % 10;
+      posicao += 1;
+
+      // 1 em 10 nunca fez o treinamento exigido — a lacuna mais grave.
+      if (faixa === 0) {
+        contagem.sem += 1;
+        continue;
+      }
+
+      const meses = catalogoPorId.get(treinamentoId)?.validadeMeses ?? 12;
+      let diasDesde: number;
+      if (faixa === 1 || faixa === 2) {
+        diasDesde = meses * 30 + 15 + Math.floor(sortear() * 60); // vencido
+        contagem.vencido += 1;
+      } else if (faixa === 3) {
+        diasDesde = meses * 30 - 12 - Math.floor(sortear() * 12); // a vencer
+        contagem.aVencer += 1;
+      } else {
+        diasDesde = Math.floor(sortear() * Math.max(30, meses * 30 - 90)); // em dia
+        contagem.emDia += 1;
+      }
+
+      const dataRealizacao = diasAtras(diasDesde);
+      await prisma.treinamentoRealizado.create({
+        data: {
+          colaboradorId: colaborador.id,
+          treinamentoId,
+          dataRealizacao,
+          validade: somarMeses(dataRealizacao, meses),
+          instrutor: escolher(INSTRUTORES_DEMO),
+        },
+      });
+      realizacoes += 1;
+    }
+  }
+
+  console.log(`Realizacoes criadas: ${realizacoes}`);
+  console.log(
+    `  em dia ${contagem.emDia} | a vencer ${contagem.aVencer} | vencidos ${contagem.vencido} | sem treinamento ${contagem.sem}`,
+  );
+}
+
+
+/* ==========================================================================
+   Etapa 12 — Auditorias
+   ========================================================================== */
+
+/** Auditorias com scores variados — a nota do pilar nasce com conteudo. */
+async function semearAuditorias(): Promise<void> {
+  const jaExiste = await prisma.auditoria.count();
+  if (jaExiste > 0) {
+    console.log(`Auditorias ja cadastradas: ${jaExiste}.`);
+    return;
+  }
+
+  const clientes = await prisma.cliente.findMany({ select: { id: true, nomeFantasia: true } });
+  if (clientes.length === 0) return;
+
+  const MODELOS = [
+    { tipo: 'ISO_45001' as const, titulo: 'Auditoria de manutencao ISO 45001', avaliados: 120, atendidos: 112, ncMaiores: 0, ncMenores: 4, diasAtras: 45, auditor: 'Bureau Veritas' },
+    { tipo: 'ISO_14001' as const, titulo: 'Auditoria de manutencao ISO 14001', avaliados: 96, atendidos: 90, ncMaiores: 1, ncMenores: 3, diasAtras: 90, auditor: 'DNV' },
+    { tipo: 'INTERNA' as const, titulo: 'Auditoria interna semestral SSMA', avaliados: 80, atendidos: 68, ncMaiores: 2, ncMenores: 5, diasAtras: 30, auditor: 'Equipe SSMA — SafetyGuard' },
+    { tipo: 'CLIENTE' as const, titulo: 'Auditoria de contrato do cliente', avaliados: 60, atendidos: 57, ncMaiores: 0, ncMenores: 2, diasAtras: 120, auditor: 'Auditoria corporativa do cliente' },
+    { tipo: 'LEGAL' as const, titulo: 'Verificacao de requisitos legais NRs', avaliados: 150, atendidos: 131, ncMaiores: 3, ncMenores: 8, diasAtras: 60, auditor: 'Consultoria juridica SST' },
+  ];
+
+  let total = 0;
+  for (const [indice, cliente] of clientes.entries()) {
+    // Cada cliente recebe 2 auditorias concluidas + 1 planejada.
+    for (let n = 0; n < 2; n += 1) {
+      const modelo = MODELOS[(indice + n) % MODELOS.length]!;
+      await prisma.auditoria.create({
+        data: {
+          clienteId: cliente.id,
+          tipo: modelo.tipo,
+          titulo: `${modelo.titulo} — ${cliente.nomeFantasia}`,
+          dataRealizacao: diasAtras(modelo.diasAtras + indice * 7),
+          auditor: modelo.auditor,
+          situacao: 'CONCLUIDA',
+          requisitosAvaliados: modelo.avaliados,
+          requisitosAtendidos: modelo.atendidos - (indice % 3),
+          ncMaiores: modelo.ncMaiores,
+          ncMenores: modelo.ncMenores,
+        },
+      });
+      total += 1;
+    }
+
+    await prisma.auditoria.create({
+      data: {
+        clienteId: cliente.id,
+        tipo: 'INTERNA',
+        titulo: `Auditoria interna programada — ${cliente.nomeFantasia}`,
+        dataRealizacao: diasAtras(-30 - indice * 10),
+        situacao: 'PLANEJADA',
+      },
+    });
+    total += 1;
+  }
+
+  console.log(`Auditorias criadas: ${total}`);
+}
+
+
+/* ==========================================================================
+   Etapa 13 — DDS Digital
+   ========================================================================== */
+
+/** Temas extraidos do acervo "100 Temas de DDS Prontos" (90 temas no doc). */
+const TEMAS_DDS: Array<{ numero: number; titulo: string; categoria: string }> = [
+  { numero: 1, titulo: "Importância do uso correto do EPI", categoria: "Uso e conservação de EPIs" },
+  { numero: 2, titulo: "Como conservar seu EPI", categoria: "Uso e conservação de EPIs" },
+  { numero: 3, titulo: "EPI não é enfeite: por que usar sempre", categoria: "Uso e conservação de EPIs" },
+  { numero: 4, titulo: "Protetor auditivo e a perda de audição", categoria: "Uso e conservação de EPIs" },
+  { numero: 5, titulo: "Óculos de proteção e a visão", categoria: "Uso e conservação de EPIs" },
+  { numero: 6, titulo: "Calçado de segurança", categoria: "Uso e conservação de EPIs" },
+  { numero: 7, titulo: "Luvas certas para cada tarefa", categoria: "Uso e conservação de EPIs" },
+  { numero: 8, titulo: "Proteção respiratória", categoria: "Uso e conservação de EPIs" },
+  { numero: 9, titulo: "Cinto de segurança em altura", categoria: "Uso e conservação de EPIs" },
+  { numero: 10, titulo: "Higienização dos EPIs", categoria: "Uso e conservação de EPIs" },
+  { numero: 11, titulo: "Quase-acidente também é aviso", categoria: "Prevenção de acidentes" },
+  { numero: 12, titulo: "Atos inseguros x condições inseguras", categoria: "Prevenção de acidentes" },
+  { numero: 13, titulo: "Pressa é inimiga da segurança", categoria: "Prevenção de acidentes" },
+  { numero: 14, titulo: "Atenção plena na tarefa", categoria: "Prevenção de acidentes" },
+  { numero: 15, titulo: "Distração e celular no trabalho", categoria: "Prevenção de acidentes" },
+  { numero: 16, titulo: "Cuidado ao subir e descer escadas", categoria: "Prevenção de acidentes" },
+  { numero: 17, titulo: "Pisos molhados e quedas", categoria: "Prevenção de acidentes" },
+  { numero: 18, titulo: "Choque elétrico: como evitar", categoria: "Prevenção de acidentes" },
+  { numero: 19, titulo: "Queimaduras no trabalho", categoria: "Prevenção de acidentes" },
+  { numero: 20, titulo: "Acidentes de trajeto", categoria: "Prevenção de acidentes" },
+  { numero: 21, titulo: "Postura correta ao sentar", categoria: "Ergonomia e saúde" },
+  { numero: 22, titulo: "Levantamento manual de cargas", categoria: "Ergonomia e saúde" },
+  { numero: 23, titulo: "Pausas e ginástica laboral", categoria: "Ergonomia e saúde" },
+  { numero: 24, titulo: "LER/DORT: como prevenir", categoria: "Ergonomia e saúde" },
+  { numero: 25, titulo: "Trabalho repetitivo", categoria: "Ergonomia e saúde" },
+  { numero: 26, titulo: "Iluminação e a saúde dos olhos", categoria: "Ergonomia e saúde" },
+  { numero: 27, titulo: "Hidratação no trabalho", categoria: "Ergonomia e saúde" },
+  { numero: 28, titulo: "Sono e fadiga", categoria: "Ergonomia e saúde" },
+  { numero: 29, titulo: "Alongamento antes da jornada", categoria: "Ergonomia e saúde" },
+  { numero: 30, titulo: "Saúde mental e estresse", categoria: "Ergonomia e saúde" },
+  { numero: 31, titulo: "Como usar o extintor", categoria: "Incêndio e emergências" },
+  { numero: 32, titulo: "Tipos de extintores", categoria: "Incêndio e emergências" },
+  { numero: 33, titulo: "Rota de fuga: você sabe a sua?", categoria: "Incêndio e emergências" },
+  { numero: 34, titulo: "Plano de abandono de área", categoria: "Incêndio e emergências" },
+  { numero: 35, titulo: "Primeiros socorros básicos", categoria: "Incêndio e emergências" },
+  { numero: 36, titulo: "Parada cardiorrespiratória: o que fazer", categoria: "Incêndio e emergências" },
+  { numero: 37, titulo: "Vazamento de gás", categoria: "Incêndio e emergências" },
+  { numero: 38, titulo: "Brigada de incêndio", categoria: "Incêndio e emergências" },
+  { numero: 39, titulo: "Ponto de encontro", categoria: "Incêndio e emergências" },
+  { numero: 40, titulo: "Combate a princípio de incêndio", categoria: "Incêndio e emergências" },
+  { numero: 41, titulo: "Trabalho em altura", categoria: "Riscos específicos" },
+  { numero: 42, titulo: "Espaço confinado", categoria: "Riscos específicos" },
+  { numero: 43, titulo: "Trabalho a quente (solda)", categoria: "Riscos específicos" },
+  { numero: 44, titulo: "Movimentação de máquinas", categoria: "Riscos específicos" },
+  { numero: 45, titulo: "Empilhadeira e pedestres", categoria: "Riscos específicos" },
+  { numero: 46, titulo: "Produtos químicos e FISPQ", categoria: "Riscos específicos" },
+  { numero: 47, titulo: "Ruído ocupacional", categoria: "Riscos específicos" },
+  { numero: 48, titulo: "Calor e exposição ao sol", categoria: "Riscos específicos" },
+  { numero: 49, titulo: "Eletricidade: NR-10 na prática", categoria: "Riscos específicos" },
+  { numero: 50, titulo: "Bloqueio e etiquetagem (LOTO)", categoria: "Riscos específicos" },
+  { numero: 51, titulo: "Programa 5S", categoria: "Organização e comportamento" },
+  { numero: 52, titulo: "Organização do posto de trabalho", categoria: "Organização e comportamento" },
+  { numero: 53, titulo: "Comunicação de condições inseguras", categoria: "Organização e comportamento" },
+  { numero: 54, titulo: "Sinalização de segurança", categoria: "Organização e comportamento" },
+  { numero: 55, titulo: "Trabalho em equipe e segurança", categoria: "Organização e comportamento" },
+  { numero: 56, titulo: "Liderança e exemplo em SST", categoria: "Organização e comportamento" },
+  { numero: 57, titulo: "Por que registrar tudo", categoria: "Organização e comportamento" },
+  { numero: 58, titulo: "CIPA: o que faz", categoria: "Organização e comportamento" },
+  { numero: 59, titulo: "Importância dos treinamentos", categoria: "Organização e comportamento" },
+  { numero: 60, titulo: "Cultura de segurança", categoria: "Organização e comportamento" },
+  { numero: 61, titulo: "SIPAT: por que participar", categoria: "Datas e campanhas" },
+  { numero: 62, titulo: "Abril Verde", categoria: "Datas e campanhas" },
+  { numero: 63, titulo: "Segurança fora do trabalho também", categoria: "Datas e campanhas" },
+  { numero: 64, titulo: "Segurança em casa", categoria: "Datas e campanhas" },
+  { numero: 65, titulo: "Direção defensiva", categoria: "Datas e campanhas" },
+  { numero: 66, titulo: "Álcool e drogas no trabalho", categoria: "Datas e campanhas" },
+  { numero: 67, titulo: "Tabagismo", categoria: "Datas e campanhas" },
+  { numero: 68, titulo: "Alimentação saudável", categoria: "Datas e campanhas" },
+  { numero: 69, titulo: "Vacinação", categoria: "Datas e campanhas" },
+  { numero: 70, titulo: "Setembro Amarelo e saúde mental", categoria: "Datas e campanhas" },
+  { numero: 71, titulo: "Segurança no almoxarifado", categoria: "Específicos por setor" },
+  { numero: 72, titulo: "Segurança na obra", categoria: "Específicos por setor" },
+  { numero: 73, titulo: "Segurança no escritório", categoria: "Específicos por setor" },
+  { numero: 74, titulo: "Segurança na cozinha industrial", categoria: "Específicos por setor" },
+  { numero: 75, titulo: "Segurança na manutenção", categoria: "Específicos por setor" },
+  { numero: 76, titulo: "Segurança no transporte de cargas", categoria: "Específicos por setor" },
+  { numero: 77, titulo: "Segurança em laboratórios", categoria: "Específicos por setor" },
+  { numero: 78, titulo: "Segurança na limpeza", categoria: "Específicos por setor" },
+  { numero: 79, titulo: "Segurança com ferramentas manuais", categoria: "Específicos por setor" },
+  { numero: 80, titulo: "Segurança em trabalho noturno", categoria: "Específicos por setor" },
+  { numero: 81, titulo: "Reportar não é dedurar", categoria: "Atitude e prevenção contínua" },
+  { numero: 82, titulo: "Aprendendo com acidentes passados", categoria: "Atitude e prevenção contínua" },
+  { numero: 83, titulo: "Checklist antes de iniciar a tarefa", categoria: "Atitude e prevenção contínua" },
+  { numero: 84, titulo: "Permissão de trabalho (PT)", categoria: "Atitude e prevenção contínua" },
+  { numero: 85, titulo: "Inspeção de rotina", categoria: "Atitude e prevenção contínua" },
+  { numero: 86, titulo: "Diálogo aberto sobre riscos", categoria: "Atitude e prevenção contínua" },
+  { numero: 87, titulo: "Pequenos cuidados, grandes resultados", categoria: "Atitude e prevenção contínua" },
+  { numero: 88, titulo: "Você é responsável pela sua segurança", categoria: "Atitude e prevenção contínua" },
+  { numero: 89, titulo: "Cuidar do colega também é segurança", categoria: "Atitude e prevenção contínua" },
+  { numero: 90, titulo: "Encerrando a jornada com segurança", categoria: "Atitude e prevenção contínua" },
+];
+
+const LIDERES_DDS = ['Rafael Martini', 'Marina Duarte', 'Enio Dias Filho', 'Carla Nunes'];
+
+async function semearDds(): Promise<void> {
+  const jaExiste = await prisma.temaDds.count();
+  if (jaExiste > 0) {
+    console.log(`Temas de DDS ja cadastrados: ${jaExiste}.`);
+    return;
+  }
+
+  await prisma.temaDds.createMany({ data: TEMAS_DDS });
+  console.log(`Temas de DDS: ${TEMAS_DDS.length}`);
+
+  const temas = await prisma.temaDds.findMany({ select: { id: true }, orderBy: { numero: 'asc' } });
+  const clientes = await prisma.cliente.findMany({
+    select: { id: true, areas: { select: { id: true } } },
+  });
+
+  // Um DDS por dia util nos ultimos 21 dias, por cliente — constancia real.
+  let registros = 0;
+  for (const [indiceCliente, cliente] of clientes.entries()) {
+    for (let dia = 1; dia <= 30; dia += 1) {
+      const data = diasAtras(dia);
+      const diaSemana = data.getDay();
+      if (diaSemana === 0 || diaSemana === 6) continue;
+      // Nem todo dia foi registrado — 85% de constancia e mais realista que 100%.
+      if ((dia + indiceCliente) % 7 === 0) continue;
+
+      await prisma.registroDds.create({
+        data: {
+          clienteId: cliente.id,
+          areaId: cliente.areas.length > 0 ? escolher(cliente.areas).id : null,
+          temaId: escolher(temas).id,
+          data,
+          lider: escolher(LIDERES_DDS),
+          participantes: 6 + Math.floor(sortear() * 14),
+          duracaoMinutos: 10 + Math.floor(sortear() * 10),
+        },
+      });
+      registros += 1;
+    }
+  }
+
+  console.log(`Registros de DDS: ${registros}`);
+}
+
+
+/* ==========================================================================
+   Etapa 14 — EPI e Estoque
+   ========================================================================== */
+
+const EPIS_DEMO = [
+  { nome: 'Capacete de seguranca classe B', ca: '31469', validadeDias: 400, estoque: 45, minimo: 10 },
+  { nome: 'Oculos de protecao incolor', ca: '10346', validadeDias: 200, estoque: 8, minimo: 15 },
+  { nome: 'Protetor auricular tipo plug', ca: '5674', validadeDias: 90, estoque: 120, minimo: 50 },
+  { nome: 'Luva de vaqueta', ca: '29659', validadeDias: -20, estoque: 30, minimo: 12 },
+  { nome: 'Botina de seguranca com bico composite', ca: '41093', validadeDias: 600, estoque: 22, minimo: 8 },
+  { nome: 'Cinto de seguranca tipo paraquedista', ca: '35519', validadeDias: 25, estoque: 6, minimo: 4 },
+  { nome: 'Respirador PFF2', ca: '38508', validadeDias: 300, estoque: 200, minimo: 80 },
+];
+
+async function semearEpis(): Promise<void> {
+  const jaExiste = await prisma.epi.count();
+  if (jaExiste > 0) {
+    console.log(`EPIs ja cadastrados: ${jaExiste}.`);
+    return;
+  }
+
+  const criados: string[] = [];
+  for (const modelo of EPIS_DEMO) {
+    const epi = await prisma.epi.create({
+      data: {
+        nome: modelo.nome,
+        ca: modelo.ca,
+        validadeCa: diasAtras(-modelo.validadeDias),
+        estoqueAtual: modelo.estoque,
+        estoqueMinimo: modelo.minimo,
+      },
+      select: { id: true },
+    });
+    criados.push(epi.id);
+  }
+  console.log(`EPIs criados: ${criados.length}`);
+
+  const colaboradores = await prisma.colaborador.findMany({
+    where: { situacao: 'ATIVO' },
+    select: { id: true },
+    take: 12,
+  });
+
+  let entregas = 0;
+  for (const [indice, colaborador] of colaboradores.entries()) {
+    const epiId = criados[indice % criados.length]!;
+    await prisma.entregaEpi.create({
+      data: {
+        epiId,
+        colaboradorId: colaborador.id,
+        data: diasAtras(3 + indice * 2),
+        quantidade: 1,
+        motivo: indice % 4 === 0 ? 'SUBSTITUICAO' : 'PRIMEIRA_ENTREGA',
+      },
+    });
+    await prisma.epi.update({ where: { id: epiId }, data: { estoqueAtual: { decrement: 1 } } });
+    entregas += 1;
+  }
+  console.log(`Entregas de EPI: ${entregas}`);
+}
+
+
+/* ==========================================================================
+   Etapa 16 — Meio Ambiente e ESG
+   ========================================================================== */
+
+/**
+ * Leituras mensais ESG dos ultimos 6 meses.
+ * Nenhuma ocorrencia ambiental e semeada: a meta e zero, e o estado inicial
+ * honesto e o historico limpo — a nota do pilar nasce em 100.
+ */
+async function semearMeioAmbiente(): Promise<void> {
+  const jaExiste = await prisma.indicadorAmbiental.count();
+  if (jaExiste > 0) {
+    console.log(`Leituras ESG ja cadastradas: ${jaExiste}.`);
+    return;
+  }
+
+  const clientes = await prisma.cliente.findMany({ select: { id: true } });
+  const agora = new Date();
+  let leituras = 0;
+
+  for (const [indice, cliente] of clientes.entries()) {
+    for (let mes = 1; mes <= 6; mes += 1) {
+      const competencia = new Date(agora.getFullYear(), agora.getMonth() - mes, 1);
+      const base = 1 + indice * 0.35;
+      const residuos = Math.round((3000 + mes * 120) * base);
+
+      await prisma.indicadorAmbiental.create({
+        data: {
+          clienteId: cliente.id,
+          competencia,
+          aguaM3: Math.round((420 - mes * 8) * base),
+          energiaKwh: Math.round((38000 - mes * 600) * base),
+          residuosKg: residuos,
+          residuosRecicladosKg: Math.round(residuos * (0.52 + mes * 0.015)),
+          emissoesTco2: Math.round((12.4 - mes * 0.2) * base * 1000) / 1000,
+        },
+      });
+      leituras += 1;
+    }
+  }
+
+  console.log(`Leituras ESG: ${leituras}`);
+}
+
 async function main(): Promise<void> {
   await semearAdministrador();
   const empresaId = await semearMatriz();
@@ -1356,6 +1792,11 @@ async function main(): Promise<void> {
   await semearPlanosDeAcao();
   await semearColaboradores();
   await semearDocumentos();
+  await semearTreinamentos();
+  await semearAuditorias();
+  await semearDds();
+  await semearEpis();
+  await semearMeioAmbiente();
 }
 
 main()

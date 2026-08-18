@@ -85,6 +85,16 @@ export interface PainelExecutivo {
 
 export interface PainelGerencial {
   geradoEm: string;
+  scoreAreas: Array<{
+    areaId: string;
+    area: string;
+    codigo: string;
+    cliente: string;
+    desvios30Dias: number;
+    inspecaoEmDia: boolean;
+    planosAbertos: number;
+    score: number;
+  }>;
   icsg: ResultadoIndice;
   bbs: {
     totalBbs: number;

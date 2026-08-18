@@ -60,7 +60,7 @@ export function LeituraQrPage() {
       <div className="tela-campo">
         <div className="cartao-campo">
           <div className="campo-icone" aria-hidden="true">
-            {erro?.codigo === 'AREA_INATIVA' ? '<Icone nome="bloqueado" />' : '<Icone nome="interrogacao" />'}
+            {erro?.codigo === 'AREA_INATIVA' ? <Icone nome="bloqueado" tamanho={22} /> : <Icone nome="interrogacao" tamanho={22} />}
           </div>
           <h1>{erro?.codigo === 'AREA_INATIVA' ? 'Área inativa' : 'QR Code não reconhecido'}</h1>
           <p>{erro?.mensagem ?? 'Este código não corresponde a nenhuma área cadastrada.'}</p>

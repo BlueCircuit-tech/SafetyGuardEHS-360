@@ -311,6 +311,9 @@ export function ColaboradoresPage() {
                           <Link className="btn btn-ghost btn-sm" to={`/colaboradores/${colaborador.id}`}>
                             Abrir
                           </Link>
+                          <Link className="btn btn-ghost btn-sm" to={`/colaboradores/${colaborador.id}/ppp`}>
+                            PPP
+                          </Link>
                           {podeEscrever ? (
                             <button type="button" className="btn btn-ghost btn-sm" onClick={() => void excluir(colaborador)}>
                               Excluir

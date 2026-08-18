@@ -30,7 +30,7 @@ import {
 import { painelBbs, resumoObservacoes } from './indicadores.service.js';
 import { prisma } from '../../db.js';
 import { MIMES_IMAGEM_ACEITOS, removerArquivoPublico, salvarImagem } from '../../lib/arquivos.js';
-import { RequisicaoInvalida } from '../../lib/erros.js';
+import { NaoEncontrado, RequisicaoInvalida } from '../../lib/erros.js';
 import { contextoDeAuditoria } from '../../lib/autenticacao.js';
 import { guardaPorMetodo } from '../../lib/guarda.js';
 import { uploadMaxBytes } from '../../env.js';
@@ -147,6 +147,105 @@ export async function rotasObservacoes(app: FastifyInstance): Promise<void> {
     const filtro = observacaoFiltroSchema.parse(request.query);
     const pagina = await listarObservacoes(filtro);
     return { ...pagina, itens: pagina.itens.map((item) => serializar(item as ObservacaoComRelacoes)) };
+  });
+
+
+  /**
+   * Linha do tempo da ocorrencia (secao 32 do plano diretor): registro,
+   * classificacao, comunicacao, plano, tratativa, evidencia e encerramento —
+   * tudo derivado dos dados reais, nada digitado a mao.
+   */
+  app.get('/observacoes/:id/timeline', async (request) => {
+    const { id } = paramsSchema.parse(request.params);
+    const observacao = await prisma.observacao.findUnique({
+      where: { id },
+      include: {
+        causa: { select: { descricao: true } },
+        planosDeAcao: {
+          orderBy: { criadoEm: 'asc' },
+          select: {
+            id: true,
+            codigo: true,
+            criadoEm: true,
+            dataInicioTratativa: true,
+            dataConclusao: true,
+            evidenciaUrl: true,
+            nivelEscalonamento: true,
+            dataUltimoEscalonamento: true,
+            status: true,
+            responsavelNome: true,
+          },
+        },
+      },
+    });
+    if (!observacao) throw new NaoEncontrado('Observacao nao encontrada.', 'OBSERVACAO_NAO_ENCONTRADA');
+
+    const notificacoes = await prisma.notificacao.findMany({
+      where: { observacaoId: id },
+      orderBy: { criadoEm: 'asc' },
+      select: { canal: true, destinatarios: true, criadoEm: true, nivelEscalonamento: true, prioridade: true },
+    });
+
+    interface EventoTimeline {
+      quando: Date;
+      titulo: string;
+      detalhe: string;
+      tipo: 'REGISTRO' | 'COMUNICACAO' | 'PLANO' | 'TRATATIVA' | 'EVIDENCIA' | 'ENCERRAMENTO' | 'ESCALONAMENTO';
+    }
+    const eventos: EventoTimeline[] = [];
+
+    eventos.push({
+      quando: observacao.dataHora,
+      titulo: 'Registro de campo',
+      detalhe: `${observacao.observador} registrou a ocorrencia${observacao.fotoUrl ? ' com foto' : ''}${observacao.grauRisco ? ` — grau ${observacao.grauRisco}` : ''}${observacao.causa ? ` · causa: ${observacao.causa.descricao}` : ''}.`,
+      tipo: 'REGISTRO',
+    });
+
+    for (const notificacao of notificacoes) {
+      const escalonada = notificacao.nivelEscalonamento > 0;
+      eventos.push({
+        quando: notificacao.criadoEm,
+        titulo: escalonada ? `Escalonamento — ${notificacao.canal}` : `Comunicacao — ${notificacao.canal}`,
+        detalhe: `Destinatarios: ${notificacao.destinatarios} · prioridade ${notificacao.prioridade}.`,
+        tipo: escalonada ? 'ESCALONAMENTO' : 'COMUNICACAO',
+      });
+    }
+
+    for (const plano of observacao.planosDeAcao) {
+      eventos.push({
+        quando: plano.criadoEm,
+        titulo: `Plano de acao ${plano.codigo} aberto`,
+        detalhe: `Responsavel: ${plano.responsavelNome}.`,
+        tipo: 'PLANO',
+      });
+      if (plano.dataInicioTratativa) {
+        eventos.push({
+          quando: plano.dataInicioTratativa,
+          titulo: 'Tratativa iniciada',
+          detalhe: `${plano.codigo} entrou em andamento.`,
+          tipo: 'TRATATIVA',
+        });
+      }
+      if (plano.evidenciaUrl) {
+        eventos.push({
+          quando: plano.dataConclusao ?? plano.criadoEm,
+          titulo: 'Evidencia anexada',
+          detalhe: `Evidencia de correcao registrada no ${plano.codigo}.`,
+          tipo: 'EVIDENCIA',
+        });
+      }
+      if (plano.dataConclusao) {
+        eventos.push({
+          quando: plano.dataConclusao,
+          titulo: `Plano ${plano.codigo} concluido`,
+          detalhe: `Encerrado com status ${plano.status}.`,
+          tipo: 'ENCERRAMENTO',
+        });
+      }
+    }
+
+    eventos.sort((a, b) => a.quando.getTime() - b.quando.getTime());
+    return { observacaoId: id, eventos };
   });
 
   app.get('/observacoes/:id', async (request) => {

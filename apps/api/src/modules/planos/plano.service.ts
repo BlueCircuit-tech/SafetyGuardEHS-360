@@ -1,15 +1,17 @@
 import type { PlanoAcao, Prisma } from '@prisma/client';
 import {
-  ESCALONAMENTO,
   PRAZO_PADRAO_POR_CRITICIDADE,
   ROTULO_HIERARQUIA,
   calcularEscalonamento,
   criticidadePeloGrau,
   definicaoDoTipo,
+  escalonamentoDaRegra,
   estaEmAberto,
   type CriticidadePlano,
+  type DegrauEscalonamento,
   type PlanoAcaoCreateData,
   type PlanoAcaoFiltro,
+  type SituacaoEscalonamento,
   type TipoObservacao,
 } from '@safetyguard/shared';
 import { prisma } from '../../db.js';
@@ -21,6 +23,49 @@ import { registrarNotificacoes } from './notificacao.service.js';
 
 const ENTIDADE = 'PlanoAcao';
 const MS_POR_HORA = 60 * 60 * 1000;
+
+/** Observacao minima para derivar a regra de comunicacao de um plano. */
+export interface ObservacaoDoPlano {
+  tipo: string;
+  classificacaoBird: string | null;
+  grauRisco: string | null;
+  causa?: { descricao: string } | null;
+}
+
+/**
+ * Escada de escalonamento de um plano.
+ *
+ * Plano aberto a partir de observacao usa a escada da SUA classificacao na
+ * Matriz de Comunicacao (um A-MAJOR escala em 2h; um C-MINOR, em 24h). Plano
+ * manual usa a escada generica do plano diretor, ancorada no proprio prazo.
+ */
+export function escadaDoPlano(
+  observacao: ObservacaoDoPlano | null | undefined,
+  prazoHoras: number,
+): DegrauEscalonamento[] {
+  const regra = observacao
+    ? comunicacaoDaObservacao({
+        tipo: observacao.tipo as TipoObservacao,
+        classificacaoBird: observacao.classificacaoBird,
+        grauRisco: observacao.grauRisco as never,
+        causa: observacao.causa,
+      })
+    : null;
+
+  return escalonamentoDaRegra(regra, prazoHoras);
+}
+
+/** Situacao de escalonamento de um plano no momento `agora` — helper unico. */
+export function situacaoDoPlano(
+  plano: Pick<PlanoAcao, 'criadoEm' | 'prazo'> & { observacao?: ObservacaoDoPlano | null },
+  agora = new Date(),
+): SituacaoEscalonamento & { escada: DegrauEscalonamento[] } {
+  const horasDesdeORegistro = (agora.getTime() - plano.criadoEm.getTime()) / MS_POR_HORA;
+  const prazoHoras = Math.max(0, (plano.prazo.getTime() - plano.criadoEm.getTime()) / MS_POR_HORA);
+  const escada = escadaDoPlano(plano.observacao, prazoHoras);
+
+  return { ...calcularEscalonamento(horasDesdeORegistro, prazoHoras, escada), escada };
+}
 
 export const COM_RELACOES = {
   observacao: {
@@ -374,6 +419,8 @@ export async function abrirPlanoDaObservacao(
       regra,
       prazoLimite: prazo,
       codigoPlano: plano.codigo,
+      areaId: observacao.areaId,
+      tipoObservacao: observacao.tipo,
     });
   });
 }
@@ -387,9 +434,20 @@ export async function atualizarPlano(
 
   // Conclusao sem data explicita carimba o momento atual.
   const concluindo = dados.status === 'CONCLUIDO' && atual.status !== 'CONCLUIDO';
+
+  /*
+   * Primeira resposta: pela Matriz de Comunicacao, "resposta" e o status sair
+   * de ABERTO — nao a abertura do e-mail. E a base do KPI de tempo medio.
+   */
+  const respondendo =
+    atual.status === 'ABERTO' &&
+    !atual.dataInicioTratativa &&
+    (dados.status === 'EM_ANDAMENTO' || dados.status === 'CONCLUIDO');
+
   const data: Prisma.PlanoAcaoUncheckedUpdateInput = {
     ...dados,
     ...(concluindo && !dados.dataConclusao ? { dataConclusao: new Date() } : {}),
+    ...(respondendo ? { dataInicioTratativa: new Date() } : {}),
   };
 
   return prisma.$transaction(async (tx) => {
@@ -476,13 +534,12 @@ export async function processarEscalonamentos(contexto: ContextoAuditoria = {}):
   const escalonados: ResultadoEscalonamento['escalonados'] = [];
 
   for (const plano of vencidos) {
-    const horasDesdeORegistro = (agora.getTime() - plano.criadoEm.getTime()) / MS_POR_HORA;
-    const prazoHoras = (plano.prazo.getTime() - plano.criadoEm.getTime()) / MS_POR_HORA;
-    const situacao = calcularEscalonamento(horasDesdeORegistro, Math.max(0, prazoHoras));
+    // Escada da classificacao de origem: A-MAJOR escala em 2h, C-MINOR em 24h.
+    const situacao = situacaoDoPlano(plano, agora);
 
     if (situacao.degrau <= plano.nivelEscalonamento) continue;
 
-    const degrau = ESCALONAMENTO[situacao.degrau];
+    const degrau = situacao.escada[situacao.degrau];
     if (!degrau) continue;
 
     const regra = plano.observacao
@@ -531,6 +588,8 @@ export async function processarEscalonamentos(contexto: ContextoAuditoria = {}):
           nivelAcionado: degrau.nivel,
           nivelEscalonamento: situacao.degrau,
           codigoPlano: plano.codigo,
+          areaId: plano.areaId,
+          tipoObservacao: plano.observacao?.tipo ?? null,
         });
       }
     });

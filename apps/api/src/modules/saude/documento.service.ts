@@ -24,6 +24,7 @@ function montarWhere(filtro: DocumentoFiltro, hoje = new Date()): Prisma.Documen
   if (filtro.areaId) where.areaId = filtro.areaId;
   if (filtro.terceiroId) where.terceiroId = filtro.terceiroId;
   if (filtro.colaboradorId) where.colaboradorId = filtro.colaboradorId;
+  if (filtro.observacaoId) where.observacaoId = filtro.observacaoId;
   if (filtro.tipo) where.tipo = filtro.tipo;
   if (filtro.abrangencia) where.abrangencia = filtro.abrangencia;
   if (filtro.situacao) where.situacao = filtro.situacao;
@@ -57,6 +58,7 @@ const COM_ALVOS = {
   area: { select: { id: true, nome: true, codigo: true } },
   terceiro: { select: { id: true, nomeFantasia: true } },
   colaborador: { select: { id: true, nome: true, cpf: true } },
+  observacaoRef: { select: { id: true, descricao: true, dataHora: true } },
 } satisfies Prisma.DocumentoSsmaInclude;
 
 export async function listarDocumentos(filtro: DocumentoFiltro) {
@@ -124,6 +126,12 @@ async function validarAlvos(dados: Partial<DocumentoCreateData>, clienteId: stri
       campo: 'colaboradorId',
       rotulo: 'Colaborador',
       buscar: () => prisma.colaborador.findUnique({ where: { id: dados.colaboradorId! }, select: { clienteId: true } }),
+    },
+    {
+      id: dados.observacaoId,
+      campo: 'observacaoId',
+      rotulo: 'Ocorrencia',
+      buscar: () => prisma.observacao.findUnique({ where: { id: dados.observacaoId! }, select: { clienteId: true } }),
     },
   ];
 

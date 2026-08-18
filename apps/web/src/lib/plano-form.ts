@@ -100,20 +100,49 @@ export interface NotificacaoApi {
   corpo: string;
   nivelEscalonamento: number;
   status: StatusNotificacao;
+  prioridade: 'CRITICA' | 'ALTA' | 'MEDIA' | 'BAIXA';
+  agrupada: boolean;
+  canalFallback: string | null;
   erro: string | null;
   criadoEm: string;
   planoAcao?: { id: string; codigo: string; acao: string; status: string } | null;
   cliente?: { id: string; nomeFantasia: string } | null;
 }
 
+export const ROTULO_CANAL_NOTIFICACAO: Record<CanalNotificacao, string> = {
+  EMAIL: 'E-mail',
+  WHATSAPP: 'WhatsApp',
+  VOZ: 'Ligacao de voz',
+};
+
+export const PILL_PRIORIDADE_NOTIFICACAO: Record<NotificacaoApi['prioridade'], string> = {
+  CRITICA: 'bad',
+  ALTA: 'orange',
+  MEDIA: 'warn',
+  BAIXA: 'gray',
+};
+
+export const ROTULO_PRIORIDADE_NOTIFICACAO: Record<NotificacaoApi['prioridade'], string> = {
+  CRITICA: 'Critica',
+  ALTA: 'Alta',
+  MEDIA: 'Media',
+  BAIXA: 'Baixa',
+};
+
 export interface ResumoNotificacoes {
   total: number;
   email: number;
   whatsapp: number;
+  voz: number;
   simuladas: number;
   enviadas: number;
   falhas: number;
   porEscalonamento: number;
+  agrupadas: number;
+  criticas: number;
+  /** Media entre o registro e a primeira resposta (status Em andamento). */
+  tempoMedioRespostaHoras: number | null;
+  planosRespondidos: number;
 }
 
 export const VALORES_INICIAIS_PLANO: PlanoAcaoFormValues = {

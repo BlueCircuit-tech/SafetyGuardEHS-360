@@ -162,6 +162,16 @@ enum StatusPlano {
 enum CanalNotificacao {
   EMAIL
   WHATSAPP
+  /// Ligacao de voz — Risco I fora do horario comercial ou fallback sem entrega.
+  VOZ
+}
+
+/// Prioridade de disparo, herdada da Matriz de Comunicacao.
+enum PrioridadeNotificacao {
+  CRITICA
+  ALTA
+  MEDIA
+  BAIXA
 }
 
 /// SIMULADA = mensagem montada e registrada, sem provedor acionado.
@@ -329,14 +339,20 @@ model Cliente {
   criadoEm     DateTime @default(now())
   atualizadoEm DateTime @updatedAt
 
-  terceiros          Terceiro[]
-  areas              Area[]
-  observacoesDeCampo Observacao[]
-  planosDeAcao       PlanoAcao[]
-  colaboradores      Colaborador[]
-  documentos         DocumentoSsma[]
-  notificacoes       Notificacao[]
-  usuarios           Usuario[]
+  terceiros             Terceiro[]
+  areas                 Area[]
+  observacoesDeCampo    Observacao[]
+  planosDeAcao          PlanoAcao[]
+  colaboradores         Colaborador[]
+  documentos            DocumentoSsma[]
+  auditorias            Auditoria[]
+  registrosDds          RegistroDds[]
+  ocorrenciasAmbientais OcorrenciaAmbiental[]
+  indicadoresAmbientais IndicadorAmbiental[]
+  acidentes             Acidente[]
+  inventarioRiscos      InventarioRisco[]
+  notificacoes          Notificacao[]
+  usuarios              Usuario[]
 
   @@unique([empresaId, cnpj])
   @@unique([empresaId, numeroContrato])
@@ -535,6 +551,11 @@ model Area {
   colaboradores      Colaborador[]
   documentos         DocumentoSsma[]
 
+  registrosDds          RegistroDds[]
+  acidentes             Acidente[]
+  inventarioRiscos      InventarioRisco[]
+  ocorrenciasAmbientais OcorrenciaAmbiental[]
+
   @@unique([clienteId, codigo])
   @@index([clienteId, situacao])
   @@index([clienteId, criticidade])
@@ -618,8 +639,11 @@ model Observacao {
   criadoEm     DateTime @default(now())
   atualizadoEm DateTime @updatedAt
 
-  planosDeAcao PlanoAcao[]
-  notificacoes Notificacao[]
+  planosDeAcao         PlanoAcao[]
+  consequencias        Consequencia[]
+  acidentes            Acidente[]
+  documentosVinculados DocumentoSsma[]
+  notificacoes         Notificacao[]
 
   @@index([clienteId, dataHora])
   @@index([clienteId, tipo, dataHora])
@@ -675,11 +699,16 @@ model PlanoAcao {
   /// Degrau ja acionado: 0 Supervisor, 1 Coordenador, 2 Gerente, 3 Corporativa.
   nivelEscalonamento      Int       @default(0)
   dataUltimoEscalonamento DateTime?
+  /// Momento da primeira resposta (status saiu de ABERTO) — base do KPI de
+  /// tempo medio de resposta definido na Matriz de Comunicacao.
+  dataInicioTratativa     DateTime?
 
   criadoEm     DateTime @default(now())
   atualizadoEm DateTime @updatedAt
 
-  notificacoes Notificacao[]
+  notificacoes     Notificacao[]
+  acidentes        Acidente[]
+  inventarioRiscos InventarioRisco[]
 
   @@index([clienteId, status, prazo])
   @@index([clienteId, criticidade])
@@ -706,13 +735,18 @@ model Notificacao {
 
   canal              CanalNotificacao
   /// Papeis acionados, separados por virgula (SUPERVISOR,COORDENADOR).
-  destinatarios      String            @db.VarChar(300)
-  assunto            String?           @db.VarChar(200)
-  corpo              String            @db.Text
+  destinatarios      String                @db.VarChar(300)
+  assunto            String?               @db.VarChar(200)
+  corpo              String                @db.Text
   /// Degrau do escalonamento que gerou esta notificacao.
-  nivelEscalonamento Int               @default(0)
-  status             StatusNotificacao @default(SIMULADA)
-  erro               String?           @db.VarChar(300)
+  nivelEscalonamento Int                   @default(0)
+  status             StatusNotificacao     @default(SIMULADA)
+  prioridade         PrioridadeNotificacao @default(MEDIA)
+  /// `true` quando o disparo saiu como resumo agrupado, nao individual.
+  agrupada           Boolean               @default(false)
+  /// Canal de fallback declarado pela matriz (VOZ ou EMAIL_REFORCO).
+  canalFallback      String?               @db.VarChar(20)
+  erro               String?               @db.VarChar(300)
 
   criadoEm DateTime @default(now())
 
@@ -826,6 +860,11 @@ enum TipoDocumento {
   ART_RT
   CERTIFICADO_TREINAMENTO
   PROCEDIMENTO
+  APR_AST
+  PERMISSAO_TRABALHO
+  FISPQ
+  PAE
+  PCMAT
   OUTRO
 }
 
@@ -835,6 +874,7 @@ enum AbrangenciaDocumento {
   AREA
   TERCEIRO
   COLABORADOR
+  OCORRENCIA
 }
 
 enum SituacaoDocumento {
@@ -885,8 +925,12 @@ model Colaborador {
   criadoEm     DateTime @default(now())
   atualizadoEm DateTime @updatedAt
 
-  asos       Aso[]
-  documentos DocumentoSsma[]
+  asos          Aso[]
+  documentos    DocumentoSsma[]
+  treinamentos  TreinamentoRealizado[]
+  entregasEpi   EntregaEpi[]
+  consequencias Consequencia[]
+  acidentes     Acidente[]
 
   @@unique([clienteId, cpf])
   @@index([clienteId, situacao])
@@ -946,6 +990,8 @@ model DocumentoSsma {
   terceiro      Terceiro?            @relation(fields: [terceiroId], references: [id], onDelete: SetNull)
   colaboradorId String?
   colaborador   Colaborador?         @relation(fields: [colaboradorId], references: [id], onDelete: SetNull)
+  observacaoId  String?
+  observacaoRef Observacao?          @relation(fields: [observacaoId], references: [id], onDelete: SetNull)
 
   // --- Identificacao --------------------------------------------------------
   tipo      TipoDocumento
@@ -976,4 +1022,479 @@ model DocumentoSsma {
   @@index([clienteId, tipo])
   @@index([validade])
   @@map("documento_ssma")
+}
+
+/**
+ * ==========================================================================
+ * Etapa 11 — Treinamentos e Matriz de Capacitacao
+ * ==========================================================================
+ */
+
+/// Catalogo de treinamentos: a NR, a carga e o prazo de reciclagem.
+model Treinamento {
+  id String @id @default(uuid())
+
+  nome              String  @db.VarChar(120)
+  /// Norma ou origem da exigencia (NR-10, LOTO, Integracao...).
+  norma             String? @db.VarChar(40)
+  descricao         String? @db.VarChar(500)
+  cargaHorariaHoras Decimal @db.Decimal(6, 1)
+  /// Reciclagem em meses. Nulo = sem reciclagem obrigatoria.
+  validadeMeses     Int?
+  ativo             Boolean @default(true)
+
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  requisitos  RequisitoCapacitacao[]
+  realizacoes TreinamentoRealizado[]
+
+  @@unique([nome])
+  @@map("treinamento")
+}
+
+/// Matriz de capacitacao: a FUNCAO exige o treinamento.
+///
+/// Global da consultoria — um eletricista precisa de NR-10 em qualquer
+/// contrato. A funcao e o mesmo texto do cadastro do colaborador.
+model RequisitoCapacitacao {
+  id String @id @default(uuid())
+
+  funcao        String      @db.VarChar(80)
+  treinamentoId String
+  treinamento   Treinamento @relation(fields: [treinamentoId], references: [id], onDelete: Cascade)
+
+  criadoEm DateTime @default(now())
+
+  @@unique([funcao, treinamentoId])
+  @@index([funcao])
+  @@map("requisito_capacitacao")
+}
+
+/// Quem fez o que, quando, e ate quando vale.
+///
+/// O historico e preservado: a reciclagem nao apaga o registro anterior —
+/// auditoria pede a sequencia completa, como no ASO.
+model TreinamentoRealizado {
+  id String @id @default(uuid())
+
+  colaboradorId String
+  colaborador   Colaborador @relation(fields: [colaboradorId], references: [id], onDelete: Cascade)
+  treinamentoId String
+  treinamento   Treinamento @relation(fields: [treinamentoId], references: [id], onDelete: Cascade)
+
+  dataRealizacao    DateTime  @db.Date
+  /// Nulo = sem reciclagem obrigatoria (vale para sempre).
+  validade          DateTime? @db.Date
+  instrutor         String?   @db.VarChar(120)
+  cargaHorariaHoras Decimal?  @db.Decimal(6, 1)
+  observacoes       String?   @db.VarChar(500)
+  /// Digitalizacao do certificado.
+  certificadoUrl    String?   @db.VarChar(300)
+
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  @@index([colaboradorId, treinamentoId, dataRealizacao])
+  @@index([validade])
+  @@map("treinamento_realizado")
+}
+
+/**
+ * ==========================================================================
+ * Etapa 12 — Auditorias
+ * ==========================================================================
+ */
+
+enum TipoAuditoria {
+  ISO_45001
+  ISO_14001
+  ISO_50001
+  INTERNA
+  CLIENTE
+  LEGAL
+}
+
+enum SituacaoAuditoria {
+  PLANEJADA
+  EM_ANDAMENTO
+  CONCLUIDA
+  CANCELADA
+}
+
+/// Auditoria realizada num cliente/contrato. O score e derivado na leitura
+/// (atendidos / avaliados) — nao ha nota digitada a mao.
+model Auditoria {
+  id        String  @id @default(uuid())
+  clienteId String
+  cliente   Cliente @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+
+  tipo           TipoAuditoria
+  titulo         String            @db.VarChar(150)
+  dataRealizacao DateTime          @db.Date
+  auditor        String?           @db.VarChar(120)
+  /// Orgao, certificadora ou norma especifica (para LEGAL).
+  referencia     String?           @db.VarChar(120)
+  situacao       SituacaoAuditoria @default(PLANEJADA)
+
+  // --- Resultado ------------------------------------------------------------
+  requisitosAvaliados   Int?
+  requisitosAtendidos   Int?
+  ncMaiores             Int     @default(0)
+  ncMenores             Int     @default(0)
+  oportunidadesMelhoria Int     @default(0)
+  observacoes           String? @db.VarChar(1000)
+  relatorioUrl          String? @db.VarChar(300)
+
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  @@index([clienteId, dataRealizacao])
+  @@index([tipo, situacao])
+  @@map("auditoria")
+}
+
+/**
+ * ==========================================================================
+ * Etapa 13 — DDS Digital
+ * ==========================================================================
+ */
+
+/// Banco de temas de DDS — semeado do acervo da consultoria.
+model TemaDds {
+  id        String  @id @default(uuid())
+  numero    Int     @unique
+  titulo    String  @db.VarChar(150)
+  categoria String? @db.VarChar(80)
+  ativo     Boolean @default(true)
+
+  registros RegistroDds[]
+
+  @@map("tema_dds")
+}
+
+/// Realizacao de um DDS: quem conduziu, onde, quantos participaram.
+model RegistroDds {
+  id        String  @id @default(uuid())
+  clienteId String
+  cliente   Cliente @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  areaId    String?
+  area      Area?   @relation(fields: [areaId], references: [id], onDelete: SetNull)
+
+  temaId    String?
+  tema      TemaDds? @relation(fields: [temaId], references: [id], onDelete: SetNull)
+  /// Assunto do dia quando nao esta no banco de temas.
+  temaLivre String?  @db.VarChar(150)
+
+  data             DateTime @db.Date
+  lider            String   @db.VarChar(120)
+  participantes    Int
+  duracaoMinutos   Int?
+  observacoes      String?  @db.VarChar(1000)
+  /// Lista de presenca digitalizada.
+  listaPresencaUrl String?  @db.VarChar(300)
+
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  @@index([clienteId, data])
+  @@map("registro_dds")
+}
+
+/**
+ * ==========================================================================
+ * Etapa 14 — Gestao de EPI e Estoque
+ * ==========================================================================
+ */
+
+enum MotivoEntregaEpi {
+  PRIMEIRA_ENTREGA
+  SUBSTITUICAO
+  PERDA
+  DANIFICADO
+}
+
+/// Catalogo de EPI com CA (NR-06), estoque e ponto de reposicao.
+model Epi {
+  id String @id @default(uuid())
+
+  nome          String    @db.VarChar(120)
+  /// Certificado de Aprovacao.
+  ca            String    @db.VarChar(20)
+  validadeCa    DateTime? @db.Date
+  fornecedor    String?   @db.VarChar(120)
+  custoUnitario Decimal?  @db.Decimal(10, 2)
+  /// Troca periodica em meses. Nulo = troca por desgaste.
+  vidaUtilMeses Int?
+  estoqueAtual  Int       @default(0)
+  estoqueMinimo Int       @default(0)
+  ativo         Boolean   @default(true)
+
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  entregas EntregaEpi[]
+
+  @@unique([nome, ca])
+  @@index([validadeCa])
+  @@map("epi")
+}
+
+/// Ficha de entrega NR-06: quem recebeu o que, quando e por que.
+model EntregaEpi {
+  id            String      @id @default(uuid())
+  epiId         String
+  epi           Epi         @relation(fields: [epiId], references: [id], onDelete: Cascade)
+  colaboradorId String
+  colaborador   Colaborador @relation(fields: [colaboradorId], references: [id], onDelete: Cascade)
+
+  data        DateTime         @db.Date
+  quantidade  Int              @default(1)
+  motivo      MotivoEntregaEpi @default(PRIMEIRA_ENTREGA)
+  observacoes String?          @db.VarChar(500)
+
+  criadoEm DateTime @default(now())
+
+  @@index([colaboradorId, data])
+  @@index([epiId, data])
+  @@map("entrega_epi")
+}
+
+/**
+ * ==========================================================================
+ * Etapa 15 — Gestao de Consequencias
+ * ==========================================================================
+ */
+
+enum MedidaDisciplinar {
+  ORIENTACAO_VERBAL
+  ADVERTENCIA_ESCRITA
+  SUSPENSAO
+  DESLIGAMENTO
+  RECICLAGEM_TREINAMENTO
+}
+
+enum MotivacaoConsequencia {
+  CLIENTE
+  INTERNA
+  AUDITORIA
+  REINCIDENCIA
+}
+
+/// Registro de gestao de consequencia — formato da planilha real da operacao.
+model Consequencia {
+  id            String      @id @default(uuid())
+  colaboradorId String
+  colaborador   Colaborador @relation(fields: [colaboradorId], references: [id], onDelete: Cascade)
+
+  observacaoId String?
+  observacao   Observacao? @relation(fields: [observacaoId], references: [id], onDelete: SetNull)
+
+  liderNome      String                @db.VarChar(120)
+  data           DateTime              @db.Date
+  comportamento  String                @db.VarChar(200)
+  detalhamento   String                @db.VarChar(2000)
+  medida         MedidaDisciplinar
+  motivacao      MotivacaoConsequencia @default(INTERNA)
+  responsavelSst String?               @db.VarChar(120)
+
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  @@index([colaboradorId, data])
+  @@map("consequencia")
+}
+
+/**
+ * ==========================================================================
+ * Etapa 16 — Meio Ambiente e ESG
+ * ==========================================================================
+ */
+
+enum TipoOcorrenciaAmbiental {
+  DERRAMAMENTO
+  VAZAMENTO
+  EMISSAO_NAO_CONTROLADA
+  DESCARTE_IRREGULAR
+  PRODUTO_QUIMICO
+  OUTRO
+}
+
+/// Ocorrencia ambiental — a meta do plano diretor e ZERO.
+/// Grau I dispara a matriz de comunicacao (Meio Ambiente 0h → Diretoria +4h).
+model OcorrenciaAmbiental {
+  id        String  @id @default(uuid())
+  clienteId String
+  cliente   Cliente @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  areaId    String?
+  area      Area?   @relation(fields: [areaId], references: [id], onDelete: SetNull)
+
+  tipo           TipoOcorrenciaAmbiental
+  data           DateTime                @db.Date
+  descricao      String                  @db.VarChar(2000)
+  /// I, II ou III — mesmo vocabulario do restante da plataforma.
+  grauRisco      String                  @db.VarChar(3)
+  volumeEstimado String?                 @db.VarChar(40)
+  contida        Boolean                 @default(false)
+  acaoImediata   String?                 @db.VarChar(1000)
+  responsavel    String                  @db.VarChar(120)
+
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  @@index([clienteId, data])
+  @@map("ocorrencia_ambiental")
+}
+
+/// Leitura mensal dos indicadores ESG por cliente.
+model IndicadorAmbiental {
+  id        String  @id @default(uuid())
+  clienteId String
+  cliente   Cliente @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+
+  /// Sempre o dia 1 do mes.
+  competencia          DateTime @db.Date
+  aguaM3               Decimal? @db.Decimal(14, 2)
+  energiaKwh           Decimal? @db.Decimal(14, 2)
+  residuosKg           Decimal? @db.Decimal(14, 2)
+  residuosRecicladosKg Decimal? @db.Decimal(14, 2)
+  emissoesTco2         Decimal? @db.Decimal(14, 3)
+
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  @@unique([clienteId, competencia])
+  @@map("indicador_ambiental")
+}
+
+/**
+ * ==========================================================================
+ * Etapa 18 — Acidentes, CAT e Investigacao
+ * ==========================================================================
+ */
+
+enum TipoAcidente {
+  TIPICO
+  TRAJETO
+  DOENCA_OCUPACIONAL
+}
+
+enum SituacaoInvestigacao {
+  ABERTA
+  EM_INVESTIGACAO
+  CONCLUIDA
+}
+
+/// Acidente formal: CAT (S-2210) e investigacao com causa raiz.
+model Acidente {
+  id            String       @id @default(uuid())
+  clienteId     String
+  cliente       Cliente      @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  areaId        String?
+  area          Area?        @relation(fields: [areaId], references: [id], onDelete: SetNull)
+  colaboradorId String?
+  colaborador   Colaborador? @relation(fields: [colaboradorId], references: [id], onDelete: SetNull)
+  observacaoId  String?
+  observacao    Observacao?  @relation(fields: [observacaoId], references: [id], onDelete: SetNull)
+  planoAcaoId   String?
+  planoAcao     PlanoAcao?   @relation(fields: [planoAcaoId], references: [id], onDelete: SetNull)
+
+  data               DateTime     @db.Date
+  tipo               TipoAcidente
+  descricao          String       @db.VarChar(2000)
+  parteCorpoAtingida String?      @db.VarChar(120)
+  comAfastamento     Boolean      @default(false)
+  diasAfastamento    Int          @default(0)
+
+  catNumero    String?   @db.VarChar(40)
+  catEmitidaEm DateTime? @db.Date
+
+  situacaoInvestigacao    SituacaoInvestigacao @default(ABERTA)
+  investigador            String?              @db.VarChar(120)
+  causaRaiz               String?              @db.VarChar(1000)
+  fatoresContribuintes    String?              @db.VarChar(1000)
+  investigacaoConcluidaEm DateTime?            @db.Date
+
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  @@index([clienteId, data])
+  @@map("acidente")
+}
+
+/**
+ * ==========================================================================
+ * Etapa 19 — Inventario de Riscos (GRO / PGR)
+ * ==========================================================================
+ */
+
+enum TipoRisco {
+  FISICO
+  QUIMICO
+  BIOLOGICO
+  ERGONOMICO
+  ACIDENTE
+}
+
+/// Hierarquia de controles da NR-1: EPI e o ultimo recurso, nao o primeiro.
+enum NivelControle {
+  ELIMINACAO
+  SUBSTITUICAO
+  ENGENHARIA
+  ADMINISTRATIVO
+  EPI
+}
+
+enum SituacaoRisco {
+  IDENTIFICADO
+  EM_TRATAMENTO
+  CONTROLADO
+  MONITORADO
+}
+
+/// Linha do inventario de riscos que sustenta o PGR (NR-1).
+///
+/// O IIR e persistido junto dos fatores: o valor precisa ficar estavel no
+/// documento assinado, mesmo que a regua do motor mude depois.
+model InventarioRisco {
+  id        String  @id @default(uuid())
+  clienteId String
+  cliente   Cliente @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  areaId    String?
+  area      Area?   @relation(fields: [areaId], references: [id], onDelete: SetNull)
+  /// Contexto alternativo a area: o perigo da funcao.
+  funcao    String? @db.VarChar(80)
+
+  tipo           TipoRisco
+  perigo         String    @db.VarChar(150)
+  fonteGeradora  String?   @db.VarChar(200)
+  atividade      String?   @db.VarChar(200)
+  danosPossiveis String    @db.VarChar(500)
+
+  severidade    Int
+  probabilidade Int
+  exposicao     Int
+  frequencia    Int
+  /// S x P x E x F — mesma regua do IIR das observacoes de campo.
+  iir           Int
+  /// I, II ou III, derivado do IIR.
+  grauRisco     String @db.VarChar(3)
+
+  controlesExistentes String?        @db.VarChar(1000)
+  nivelControleAtual  NivelControle?
+  medidasPropostas    String?        @db.VarChar(1000)
+  planoAcaoId         String?
+  planoAcao           PlanoAcao?     @relation(fields: [planoAcaoId], references: [id], onDelete: SetNull)
+
+  situacao    SituacaoRisco @default(IDENTIFICADO)
+  responsavel String?       @db.VarChar(120)
+  /// Proxima reavaliacao — o PGR e documento vivo.
+  reavaliarEm DateTime?     @db.Date
+
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  @@index([clienteId, situacao])
+  @@index([clienteId, iir])
+  @@map("inventario_risco")
 }

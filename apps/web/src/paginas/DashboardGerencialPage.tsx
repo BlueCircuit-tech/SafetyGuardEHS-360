@@ -95,7 +95,7 @@ export function DashboardGerencialPage() {
 
   if (!painel) return null;
 
-  const { icsg, bbs, pareto, mapaCalor, planos, inspecoes, conformidade, terceiros, piramideBird } = painel;
+  const { icsg, bbs, pareto, mapaCalor, planos, inspecoes, conformidade, terceiros, piramideBird, scoreAreas } = painel;
 
   return (
     <>
@@ -198,6 +198,53 @@ export function DashboardGerencialPage() {
         <Pareto titulo="Comportamentos inseguros" linhas={pareto.comportamentosInseguros} />
         <Pareto titulo="Condições inseguras" linhas={pareto.condicoesInseguras} />
       </div>
+
+      {scoreAreas.length > 0 ? (
+        <div className="painel">
+          <h3>Score por área</h3>
+          <p className="desc">
+            Nota composta (0–100): desvios do mês, inspeção em dia e planos abertos — a convenção de pesos está
+            documentada no pacote compartilhado. Ordenado do pior para o melhor.
+          </p>
+          <div className="tbl-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Área</th>
+                  <th>Cliente</th>
+                  <th className="num-col">Desvios (30d)</th>
+                  <th>Inspeção</th>
+                  <th className="num-col">Planos abertos</th>
+                  <th>Score</th>
+                </tr>
+              </thead>
+              <tbody>
+                {scoreAreas.map((linha) => (
+                  <tr key={linha.areaId}>
+                    <td>
+                      <b>{linha.area}</b>
+                      <div className="hint mono">{linha.codigo}</div>
+                    </td>
+                    <td>{linha.cliente}</td>
+                    <td className="num-col">{linha.desvios30Dias}</td>
+                    <td>
+                      <span className={`pill ${linha.inspecaoEmDia ? 'ok' : 'bad'}`}>
+                        {linha.inspecaoEmDia ? 'Em dia' : 'Atrasada'}
+                      </span>
+                    </td>
+                    <td className="num-col">{linha.planosAbertos}</td>
+                    <td>
+                      <span className={`pill ${linha.score >= 80 ? 'ok' : linha.score >= 60 ? 'warn' : 'bad'}`}>
+                        {linha.score}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      ) : null}
 
       {mapaCalor.length > 0 ? (
         <div className="painel">

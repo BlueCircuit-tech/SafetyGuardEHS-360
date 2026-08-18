@@ -6,6 +6,7 @@ import {
   calcularMapaCalor,
   calcularPareto,
   calcularTendencia,
+  calcularScoreArea,
 } from './observacoes.js';
 import {
   PESOS_ICSG,
@@ -15,10 +16,16 @@ import {
   calcularIndiceGlobalSsma,
   calcularScoreMaturidade,
   somaDosPesos,
+  nivelDeMaturidade,
 } from './indices.js';
 import { calcularIir, classificarIir, grauRiscoPeloIir, montarPiramideBird } from './risco.js';
 import {
+  LIMITE_AGRUPAMENTO,
   calcularEscalonamento,
+  canaisDoDisparo,
+  dentroDoHorarioComercial,
+  deveAgrupar,
+  montarEscalonamentoPadrao,
   destinatariosDoDesvio,
   planoDeComunicacao,
   resolverComunicacao,
@@ -361,7 +368,14 @@ describe('matriz de comunicacao', () => {
     expect(regra.email).toBe(true);
     expect(regra.whatsapp).toBe('OBRIGATORIO');
     expect(regra.prazoHoras).toBe(0);
-    expect(regra.destinatarios).toContain('DIRETORIA');
+    // O aviso inicial vai so ao supervisor; a diretoria entra pela escada (+8h).
+    expect(regra.destinatarios).toEqual(['SUPERVISOR']);
+    expect(regra.escalonamento.map((degrau) => [degrau.aposHoras, degrau.nivel])).toEqual([
+      [0, 'SUPERVISOR'],
+      [2, 'COORDENADOR'],
+      [4, 'GERENTE'],
+      [8, 'DIRETORIA'],
+    ]);
   });
 
   it('diferencia condicao insegura grau I de grau II', () => {
@@ -402,9 +416,117 @@ describe('matriz de comunicacao', () => {
   it('soma os destinatarios da matriz com os do roteamento, sem duplicar', () => {
     const plano = planoDeComunicacao('CONDICAO_INSEGURA', 'I', 'Vazamento de oleo');
 
+    // Matriz: responsavel tecnico da area. Roteamento: Meio Ambiente + Manutencao.
+    expect(plano.destinatarios).toContain('RESPONSAVEL_TECNICO');
     expect(plano.destinatarios).toContain('MEIO_AMBIENTE');
-    expect(plano.destinatarios).toContain('SSMA');
+    expect(plano.destinatarios).toContain('MANUTENCAO');
     expect(new Set(plano.destinatarios).size).toBe(plano.destinatarios.length);
+  });
+
+  it('o roteamento so soma destinatario — prazo, canal e escada sao da Matriz Mestre', () => {
+    const semDesvio = resolverComunicacao('CONDICAO_INSEGURA', 'I');
+    const comDesvio = planoDeComunicacao('CONDICAO_INSEGURA', 'I', 'Vazamento de oleo');
+
+    expect(comDesvio.prazoHoras).toBe(semDesvio.prazoHoras);
+    expect(comDesvio.prioridade).toBe(semDesvio.prioridade);
+    expect(comDesvio.canalFallback).toBe(semDesvio.canalFallback);
+    expect(comDesvio.escalonamento).toEqual(semDesvio.escalonamento);
+  });
+
+  it('carrega prioridade, fallback e modo de disparo da planilha', () => {
+    expect(resolverComunicacao('A_MAJOR', 'I').prioridade).toBe('CRITICA');
+    expect(resolverComunicacao('A_MAJOR', 'I').canalFallback).toBe('VOZ');
+    expect(resolverComunicacao('A_MAJOR', 'I').disparo).toBe('INDIVIDUAL');
+
+    expect(resolverComunicacao('C_MINOR', 'II').prioridade).toBe('MEDIA');
+    expect(resolverComunicacao('C_MINOR', 'II').canalFallback).toBe('EMAIL_REFORCO');
+    expect(resolverComunicacao('C_MINOR', 'II').disparo).toBe('AGRUPAVEL');
+
+    expect(resolverComunicacao('F_FIRST_AID', 'III').prioridade).toBe('BAIXA');
+    expect(resolverComunicacao('F_FIRST_AID', 'III').canalFallback).toBeNull();
+    expect(resolverComunicacao('F_FIRST_AID', 'III').disparo).toBe('RESUMO_DIARIO');
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+
+describe('horario comercial e canais do disparo', () => {
+  const tercaDia = new Date(2026, 7, 18, 10, 0); // terca, 10h
+  const tercaNoite = new Date(2026, 7, 18, 22, 0); // terca, 22h
+  const domingo = new Date(2026, 7, 16, 10, 0); // domingo, 10h
+
+  it('identifica o horario comercial (07-18h, seg-sex)', () => {
+    expect(dentroDoHorarioComercial(tercaDia)).toBe(true);
+    expect(dentroDoHorarioComercial(tercaNoite)).toBe(false);
+    expect(dentroDoHorarioComercial(domingo)).toBe(false);
+    expect(dentroDoHorarioComercial(new Date(2026, 7, 18, 6, 59))).toBe(false);
+    expect(dentroDoHorarioComercial(new Date(2026, 7, 18, 7, 0))).toBe(true);
+    expect(dentroDoHorarioComercial(new Date(2026, 7, 18, 18, 0))).toBe(false);
+  });
+
+  it('fora do horario comercial, Risco I soma o canal de voz', () => {
+    const regraI = resolverComunicacao('A_MAJOR', 'I');
+
+    expect(canaisDoDisparo(regraI, tercaDia)).toEqual(['EMAIL', 'WHATSAPP']);
+    expect(canaisDoDisparo(regraI, tercaNoite)).toEqual(['EMAIL', 'WHATSAPP', 'VOZ']);
+    expect(canaisDoDisparo(regraI, domingo)).toContain('VOZ');
+  });
+
+  it('Risco II nunca aciona voz, mesmo de madrugada', () => {
+    const regraII = resolverComunicacao('C_MINOR', 'II');
+    expect(canaisDoDisparo(regraII, tercaNoite)).not.toContain('VOZ');
+  });
+});
+
+describe('agrupamento de disparos', () => {
+  it('individual nunca agrupa — e o caso de todo Risco I', () => {
+    expect(deveAgrupar('INDIVIDUAL', 100)).toBe(false);
+  });
+
+  it('agrupavel vira resumo acima de 5 ocorrencias na janela de 1 hora', () => {
+    expect(deveAgrupar('AGRUPAVEL', LIMITE_AGRUPAMENTO)).toBe(false);
+    expect(deveAgrupar('AGRUPAVEL', LIMITE_AGRUPAMENTO + 1)).toBe(true);
+  });
+
+  it('first aid sempre sai no resumo diario', () => {
+    expect(deveAgrupar('RESUMO_DIARIO', 0)).toBe(true);
+  });
+});
+
+describe('escalonamento por classificacao', () => {
+  it('A-MAJOR escala para o coordenador em 2 horas, nao em 24', () => {
+    const escada = resolverComunicacao('A_MAJOR', 'I').escalonamento;
+
+    expect(calcularEscalonamento(1, 0, escada).nivel).toBe('SUPERVISOR');
+    expect(calcularEscalonamento(2, 0, escada).nivel).toBe('COORDENADOR');
+    expect(calcularEscalonamento(4, 0, escada).nivel).toBe('GERENTE');
+    expect(calcularEscalonamento(8, 0, escada).nivel).toBe('DIRETORIA');
+  });
+
+  it('condicao insegura grau I escala do responsavel tecnico para o SSMA', () => {
+    const escada = resolverComunicacao('CONDICAO_INSEGURA', 'I').escalonamento;
+
+    expect(calcularEscalonamento(0, 0, escada).nivel).toBe('RESPONSAVEL_TECNICO');
+    expect(calcularEscalonamento(2, 0, escada).nivel).toBe('SSMA');
+    expect(calcularEscalonamento(4, 0, escada).nivel).toBe('GERENTE');
+  });
+
+  it('C-MINOR so escala quando o prazo de 24h vence', () => {
+    const escada = resolverComunicacao('C_MINOR', 'II').escalonamento;
+
+    expect(calcularEscalonamento(23, 24, escada).nivel).toBe('SUPERVISOR');
+    expect(calcularEscalonamento(24, 24, escada).nivel).toBe('COORDENADOR');
+    expect(calcularEscalonamento(24, 24, escada).proximo).toBeNull();
+  });
+
+  it('first aid nunca sobe alem do supervisor', () => {
+    const escada = resolverComunicacao('F_FIRST_AID', 'III').escalonamento;
+    expect(calcularEscalonamento(500, 24, escada).nivel).toBe('SUPERVISOR');
+  });
+
+  it('a escada generica reproduz o comportamento anterior (+24/+48/+72 pos-prazo)', () => {
+    const escada = montarEscalonamentoPadrao(24);
+    expect(escada.map((degrau) => degrau.aposHoras)).toEqual([0, 48, 72, 96]);
   });
 });
 
@@ -437,5 +559,39 @@ describe('escalonamento automatico', () => {
 
     expect(situacao.vencida).toBe(true);
     expect(situacao.horasDeAtraso).toBe(1);
+  });
+});
+
+describe('niveis de maturidade', () => {
+  it('mapeia o score para a escala Reativo → Inteligente', () => {
+    expect(nivelDeMaturidade(95).nome).toBe('Inteligente');
+    expect(nivelDeMaturidade(80).nome).toBe('Proativo');
+    expect(nivelDeMaturidade(65).nome).toBe('Preventivo');
+    expect(nivelDeMaturidade(45).nome).toBe('Controlado');
+    expect(nivelDeMaturidade(10).nome).toBe('Reativo');
+  });
+
+  it('os cortes sao exatos nos limites', () => {
+    expect(nivelDeMaturidade(90).nivel).toBe(5);
+    expect(nivelDeMaturidade(89.9).nivel).toBe(4);
+    expect(nivelDeMaturidade(0).nivel).toBe(1);
+  });
+});
+
+describe('score composto por area', () => {
+  it('area limpa pontua 100', () => {
+    expect(calcularScoreArea({ desvios30Dias: 0, inspecaoEmDia: true, planosAbertos: 0 })).toBe(100);
+  });
+
+  it('desconta por desvio, inspecao atrasada e plano aberto', () => {
+    expect(calcularScoreArea({ desvios30Dias: 5, inspecaoEmDia: true, planosAbertos: 0 })).toBe(90);
+    expect(calcularScoreArea({ desvios30Dias: 0, inspecaoEmDia: false, planosAbertos: 0 })).toBe(80);
+    expect(calcularScoreArea({ desvios30Dias: 0, inspecaoEmDia: true, planosAbertos: 2 })).toBe(90);
+  });
+
+  it('respeita os tetos e o piso zero', () => {
+    // 100 desvios estourariam a regua sem o teto de 40 pontos.
+    expect(calcularScoreArea({ desvios30Dias: 100, inspecaoEmDia: true, planosAbertos: 0 })).toBe(60);
+    expect(calcularScoreArea({ desvios30Dias: 100, inspecaoEmDia: false, planosAbertos: 20 })).toBe(10);
   });
 });

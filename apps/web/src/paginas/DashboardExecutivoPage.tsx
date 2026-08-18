@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { nivelDeMaturidade } from '@safetyguard/shared';
 import { Farol } from '../componentes/Icone';
 import { Campo } from '../componentes/Campo';
 import { useToast } from '../componentes/Toast';
@@ -153,8 +154,8 @@ export function DashboardExecutivoPage() {
           titulo="Score de Maturidade"
           valor={maturidade.valor}
           cor={maturidade.classificacao.cor}
-          nivel={maturidade.classificacao.rotulo}
-          nota={`${maturidade.pesoConsiderado}% dos pesos com dado.`}
+          nivel={`Nivel ${nivelDeMaturidade(maturidade.valor).nivel} — ${nivelDeMaturidade(maturidade.valor).nome}`}
+          nota={`${nivelDeMaturidade(maturidade.valor).descricao}. ${maturidade.pesoConsiderado}% dos pesos com dado.`}
         />
         <Indice
           titulo="Conformidade Legal"
@@ -301,7 +302,17 @@ export function DashboardExecutivoPage() {
             <tbody>
               {ranking.map((linha, indice) => (
                 <tr key={linha.clienteId}>
-                  <td>{indice + 1}</td>
+                  <td>
+                    {indice === 0 ? (
+                      <span className="medalha ouro">1º</span>
+                    ) : indice === 1 ? (
+                      <span className="medalha prata">2º</span>
+                    ) : indice === 2 ? (
+                      <span className="medalha bronze">3º</span>
+                    ) : (
+                      `${indice + 1}º`
+                    )}
+                  </td>
                   <td>
                     <b>{linha.cliente}</b>
                     {linha.centroNegocio ? <div className="hint">{linha.centroNegocio}</div> : null}

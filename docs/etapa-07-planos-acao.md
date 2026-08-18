@@ -124,30 +124,66 @@ Prazo: Imediato (até 17/08/2026 – 17:36)
 
 O emoji acompanha a urgência: 🚨 imediato · ⚠️ até 24 h · 📋 acima disso.
 
-> ⚠️ **Nenhum provedor está conectado.** As notificações nascem com status
+> **Nenhum provedor está conectado.** As notificações nascem com status
 > `SIMULADA`: montadas, registradas e auditáveis, mas não enviadas. Plugar
 > e-mail ou WhatsApp muda o status para `ENVIADA`/`FALHOU` — o modelo não muda.
 >
 > O canal segue a matriz: WhatsApp `OBRIGATORIO` e `OPCIONAL` geram registro
 > (no segundo caso para o gestor decidir enviar); `NAO` não gera.
 
+### Regras operacionais da matriz (aba Parâmetros)
+
+- **Aviso inicial enxuto**: o disparo da abertura vai só ao degrau 0h da escada
+  (ex.: o supervisor). Os demais níveis entram **pelo escalonamento**, se a
+  ação não andar — é o que evita o excesso de mensagens.
+- **Prioridade de disparo** (`Crítica`/`Alta`/`Média`/`Baixa`) gravada em cada
+  notificação, herdada da matriz.
+- **Horário comercial** (07:00–18:00, seg–sex): fora dele, ocorrência de
+  **Risco I** soma o canal de **ligação de voz** ao disparo.
+- **Agrupamento**: acima de 5 ocorrências na mesma área/tipo em 1 hora, o
+  disparo agrupável vira **resumo agrupado**; First Aid sai **sempre** no
+  resumo diário; Risco I é sempre individual.
+  *(A Matriz Mestre menciona ">5/dia"; a aba Parâmetros define ">5 em 1 hora" —
+  adotamos a aba Parâmetros, que é a regra operacional.)*
+- **Canal fallback** declarado por regra (voz para Risco I, e-mail de reforço
+  para Risco II). O **disparo** do fallback exige provedor com confirmação de
+  entrega — fica registrado junto à notificação até o transporte existir.
+- **Resposta**, para o KPI de tempo médio, é o plano mudar para
+  **Em andamento** (`dataInicioTratativa`) — não a abertura do e-mail.
+- **Precedência**: a Matriz Mestre sempre prevalece; o roteamento por desvio
+  (Manutenção, Brigada, Utilidades...) apenas **adiciona** destinatário
+  técnico, nunca altera prazo, canal ou escada.
+
 ---
 
 ## Escalonamento automático
 
 `POST /planos-acao/escalonar` varre os planos em aberto com prazo vencido e sobe
-de nível conforme o atraso:
+de nível conforme a **escada da classificação de origem** — a Matriz de
+Comunicação (planilha `Matriz_Comunicacao_Automatica_SGI_360.xlsx`) define uma
+cadência por severidade, e não um prazo único:
 
-| Atraso sobre o prazo | Nível acionado |
+| Classificação | Escada (horas desde o registro) |
 | --- | --- |
-| Registro | Supervisor |
-| +24 h | Coordenador |
-| +48 h | Gerente |
-| +72 h | Gerência Corporativa |
+| A – Major (I) | Supervisor 0h → Coordenador +2h → Gerente +4h → Diretoria +8h |
+| B – Serious (I) | Supervisor 0h → Coordenador +4h → Gerente +8h |
+| D – Major Near Miss (I) | Supervisor 0h → Coordenador +2h → Gerente +4h |
+| Condição Insegura (I) | Responsável técnico 0h → SSMA +2h → Gerente +4h |
+| Ocorrência Ambiental (I) | Meio Ambiente 0h → Gerente +2h → Diretoria +4h |
+| C – Minor (II) | Supervisor 0h → Coordenador +24h |
+| E – Near Miss (II) | Supervisor 0h → Coordenador +48h |
+| Condição Insegura (II) | Responsável técnico 0h → Coordenador +72h |
+| Comportamento Inseguro (II) | Supervisor 0h → Coordenador +24h |
+| F – First Aid (III) | Supervisor 0h (não escala) |
+
+Plano aberto **manualmente** (sem classificação de origem) usa a escada
+genérica do plano diretor, ancorada no próprio prazo: Coordenador +24h,
+Gerente +48h e Gerência Corporativa +72h após o vencimento.
 
 **É idempotente**: só escalona quando o degrau calculado é maior que o já
 registrado em `nivelEscalonamento`. Rodar duas vezes não duplica notificação —
-verificado: a segunda execução escalona 0.
+verificado: a segunda execução escalona 0. Com a escada por classificação, um
+A-MAJOR chega à Diretoria em 8 horas — antes levaria 3 dias.
 
 Cada escalonamento grava auditoria (`nivelEscalonamento: de → para`) e uma nova
 notificação, com texto de escalonamento e o nível acionado somado aos

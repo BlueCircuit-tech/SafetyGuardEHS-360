@@ -2,12 +2,11 @@ import type { FastifyInstance } from 'fastify';
 import type { PlanoAcao } from '@prisma/client';
 import { z } from 'zod';
 import {
-  ESCALONAMENTO,
+  MATRIZ_COMUNICACAO,
   ROTULO_CRITICIDADE_PLANO,
   ROTULO_HIERARQUIA,
   ROTULO_ORIGEM_PLANO,
   ROTULO_STATUS_PLANO,
-  calcularEscalonamento,
   estaEmAberto,
   notificacaoFiltroSchema,
   planoAcaoCreateSchema,
@@ -18,6 +17,8 @@ import {
   type StatusPlano,
 } from '@safetyguard/shared';
 import {
+  situacaoDoPlano,
+  type ObservacaoDoPlano,
   abrirPlanoDaObservacao,
   atualizarPlano,
   criarPlano,
@@ -43,18 +44,18 @@ const MS_POR_HORA = 60 * 60 * 1000;
 const MS_POR_DIA = 24 * MS_POR_HORA;
 
 /** Acrescenta prazo, atraso e degrau de escalonamento — tudo derivado na leitura. */
-function serializar(plano: PlanoAcao) {
+function serializar(plano: PlanoAcao & { observacao?: ObservacaoDoPlano | null }) {
   const agora = Date.now();
   const emAberto = estaEmAberto(plano.status as StatusPlano);
 
   const diasParaPrazo = Math.ceil((plano.prazo.getTime() - agora) / MS_POR_DIA);
   const atrasado = emAberto && plano.prazo.getTime() < agora;
 
-  const horasDesdeORegistro = (agora - plano.criadoEm.getTime()) / MS_POR_HORA;
-  const prazoHoras = Math.max(0, (plano.prazo.getTime() - plano.criadoEm.getTime()) / MS_POR_HORA);
-  const situacao = emAberto ? calcularEscalonamento(horasDesdeORegistro, prazoHoras) : null;
+  // Escada da classificacao de origem (A-MAJOR escala em 2h; C-MINOR em 24h).
+  const { escada, ...situacaoAtual } = situacaoDoPlano(plano, new Date(agora));
+  const situacao = emAberto ? situacaoAtual : null;
 
-  const degrauRegistrado = ESCALONAMENTO[plano.nivelEscalonamento];
+  const degrauRegistrado = escada[plano.nivelEscalonamento];
 
   return {
     ...plano,
@@ -188,13 +189,26 @@ export async function rotasPlanos(app: FastifyInstance): Promise<void> {
     return processarEscalonamentos(contextoDeAuditoria(request));
   });
 
+  /**
+   * Escadas de escalonamento por classificacao — a Matriz de Comunicacao.
+   * Um A-MAJOR escala para o coordenador em 2 horas; um C-MINOR, em 24.
+   */
   app.get('/planos-acao/escalonamento/niveis', async () =>
-    ESCALONAMENTO.map((degrau, indice) => ({
-      degrau: indice,
-      aposHoras: degrau.aposHoras,
-      nivel: degrau.nivel,
-      rotulo: degrau.rotulo,
-      rotuloNivel: ROTULO_HIERARQUIA[degrau.nivel],
+    MATRIZ_COMUNICACAO.map((regra) => ({
+      evento: regra.evento,
+      grau: regra.grau,
+      acao: regra.acao,
+      prazoRotulo: regra.prazoRotulo,
+      prioridade: regra.prioridade,
+      canalFallback: regra.canalFallback,
+      disparo: regra.disparo,
+      degraus: regra.escalonamento.map((degrau, indice) => ({
+        degrau: indice,
+        aposHoras: degrau.aposHoras,
+        nivel: degrau.nivel,
+        rotulo: degrau.rotulo,
+        rotuloNivel: ROTULO_HIERARQUIA[degrau.nivel],
+      })),
     })),
   );
 

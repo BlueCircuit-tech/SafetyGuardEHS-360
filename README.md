@@ -81,6 +81,17 @@ safetyguard-ehs-360/
 │   ├── etapa-08-pessoas-acessos.md    autenticação, perfis e permissões
 │   ├── etapa-09-saude-documentos.md   ASO, programas legais e conformidade
 │   ├── etapa-10-dashboards.md         executivo, gerencial e operacional
+│   ├── etapa-11-treinamentos.md       matriz de capacitação e NRs
+│   ├── etapa-12-auditorias.md         score derivado e pilar do índice
+│   ├── etapa-13-dds.md                diálogo diário com banco de temas
+│   ├── etapa-14-epi.md                CA, ficha NR-06 e estoque
+│   ├── etapa-15-consequencias.md      medidas disciplinares e reincidência
+│   ├── etapa-16-meio-ambiente.md      ocorrências, ESG e o último pilar
+│   ├── etapa-17-inteligencia.md       leituras automáticas com evidência
+│   ├── etapa-18-acidentes.md          CAT, investigação e documento↔ocorrência
+│   ├── etapa-19-inventario-riscos.md  GRO/PGR e central de risco
+│   ├── etapa-20-ppp.md                PPP consolidado e imprimível
+│   ├── plano-diretor-mapa.md          plano diretor × o que está construído
 │   ├── indicadores-ssma.md            fórmulas, pesos, faixas e matriz de comunicação
 │   └── api.md                          referência dos endpoints
 ├── prototype/index.html        protótipo original (referência visual)
@@ -365,6 +376,15 @@ plano: [`docs/indicadores-ssma.md`](docs/indicadores-ssma.md).
 | 8 | Pessoas, perfis e acessos (autenticação) | ✅ |
 | 9 | Saúde ocupacional e documentos (ASO, PGR, PCA, LTCAT, PPP) | ✅ |
 | 10 | Dashboards executivo, gerencial e operacional | ✅ |
+| 11 | Treinamentos e Matriz de Capacitação | ✅ |
+| 12 | Auditorias (ISO 45001/14001, internas, legais) | ✅ |
+| 13 | DDS Digital (banco de temas do acervo) | ✅ |
+| 14 | EPI e Estoque (CA, entregas NR-06, reposição) | ✅ |
+| 15 | Gestão de Consequências (medidas e reincidência) | ✅ |
+| 16 | Meio Ambiente e ESG (fecha 100% do Índice Global) | ✅ |
+| 17 | SafetyGuard Intelligence (análises automáticas) | ✅ |
+| 18 | Acidentes, CAT (S-2210) e Investigação | ✅ |
+| 19 | Inventário de Riscos (GRO/PGR) e Central de Risco | ✅ |
 
 ---
 

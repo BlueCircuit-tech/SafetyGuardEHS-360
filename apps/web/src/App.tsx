@@ -25,9 +25,19 @@ import { ComunicacaoPage } from './paginas/ComunicacaoPage';
 import { UsuariosPage } from './paginas/UsuariosPage';
 import { ColaboradoresPage } from './paginas/ColaboradoresPage';
 import { ColaboradorFormPage } from './paginas/ColaboradorFormPage';
+import { PppPage } from './paginas/PppPage';
 import { DocumentosPage } from './paginas/DocumentosPage';
 import { DocumentoFormPage } from './paginas/DocumentoFormPage';
 import { ConformidadePage } from './paginas/ConformidadePage';
+import { TreinamentosPage } from './paginas/TreinamentosPage';
+import { AuditoriasPage } from './paginas/AuditoriasPage';
+import { DdsPage } from './paginas/DdsPage';
+import { EpiPage } from './paginas/EpiPage';
+import { ConsequenciasPage } from './paginas/ConsequenciasPage';
+import { MeioAmbientePage } from './paginas/MeioAmbientePage';
+import { InteligenciaPage } from './paginas/InteligenciaPage';
+import { AcidentesPage } from './paginas/AcidentesPage';
+import { RiscosPage } from './paginas/RiscosPage';
 import { DashboardExecutivoPage } from './paginas/DashboardExecutivoPage';
 import { DashboardGerencialPage } from './paginas/DashboardGerencialPage';
 import { DashboardOperacionalPage } from './paginas/DashboardOperacionalPage';
@@ -143,12 +153,23 @@ export function App() {
               {rota('colaboradores', 'saude:ler', <ColaboradoresPage />)}
               {rota('colaboradores/novo', 'saude:escrever', <ColaboradorFormPage />)}
               {rota('colaboradores/:id', 'saude:ler', <ColaboradorFormPage />)}
+              {rota('colaboradores/:id/ppp', 'saude:ler', <PppPage />)}
 
               {rota('documentos', 'saude:ler', <DocumentosPage />)}
               {rota('documentos/novo', 'saude:escrever', <DocumentoFormPage />)}
               {rota('documentos/:id', 'saude:ler', <DocumentoFormPage />)}
 
               {rota('conformidade', 'indicadores:ler', <ConformidadePage />)}
+
+              {rota('treinamentos', 'saude:ler', <TreinamentosPage />)}
+              {rota('auditorias', 'cadastros:ler', <AuditoriasPage />)}
+              {rota('dds', 'observacoes:ler', <DdsPage />)}
+              {rota('epis', 'cadastros:ler', <EpiPage />)}
+              {rota('consequencias', 'planos:ler', <ConsequenciasPage />)}
+              {rota('meio-ambiente', 'observacoes:ler', <MeioAmbientePage />)}
+              {rota('inteligencia', 'indicadores:ler', <InteligenciaPage />)}
+              {rota('acidentes', 'planos:ler', <AcidentesPage />)}
+              {rota('riscos', 'cadastros:ler', <RiscosPage />)}
 
               {rota('dashboard-executivo', 'indicadores:ler', <DashboardExecutivoPage />)}
               {rota('dashboard-gerencial', 'indicadores:ler', <DashboardGerencialPage />)}

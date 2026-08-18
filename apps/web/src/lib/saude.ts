@@ -120,6 +120,7 @@ export interface DocumentoApi {
   areaId: string | null;
   terceiroId: string | null;
   colaboradorId: string | null;
+  observacaoId: string | null;
   tipo: TipoDocumento;
   titulo: string;
   numero: string | null;

@@ -2,7 +2,7 @@ import type { Prisma } from '@prisma/client';
 import {
   ROTULO_HIERARQUIA,
   arredondar,
-  calcularEscalonamento,
+  calcularScoreArea,
   calcularIndiceGlobalSsma,
   calcularScoreMaturidade,
   classificarDesempenho,
@@ -13,8 +13,11 @@ import {
 import { prisma } from '../../db.js';
 import { obterEmpresaOuFalhar } from '../empresa/empresa.service.js';
 import { painelBbs } from '../observacoes/indicadores.service.js';
-import { resumoPlanos } from '../planos/plano.service.js';
+import { resumoPlanos, situacaoDoPlano } from '../planos/plano.service.js';
 import { painelConformidade } from '../saude/conformidade.service.js';
+import { notaDeTreinamentos } from '../treinamentos/treinamento.service.js';
+import { notaDeAuditorias } from '../auditorias/auditoria.service.js';
+import { notaDeMeioAmbiente } from '../meio-ambiente/meio-ambiente.routes.js';
 
 /**
  * Etapa 10 — dashboards executivo, gerencial e operacional.
@@ -25,7 +28,6 @@ import { painelConformidade } from '../saude/conformidade.service.js';
  */
 
 const MS_POR_DIA = 24 * 60 * 60 * 1000;
-const MS_POR_HORA = 60 * 60 * 1000;
 
 export interface FiltroDashboard {
   clienteId?: string;
@@ -142,9 +144,9 @@ async function notaDeGestaoDeRiscos(filtro: FiltroDashboard, empresaId: string) 
 
 /** Motivo pelo qual um pilar ficou sem nota — o painel mostra, nao esconde. */
 const MOTIVO_SEM_FONTE: Partial<Record<PilarIndiceGlobal, string>> = {
-  AUDITORIAS: 'Modulo de auditorias ainda nao implementado.',
-  MEIO_AMBIENTE: 'Indicadores ambientais ainda nao coletados.',
-  TREINAMENTOS: 'Matriz de capacitacao ainda nao implementada (Etapa futura).',
+  AUDITORIAS: 'Nenhuma auditoria concluida nos ultimos 12 meses.',
+  MEIO_AMBIENTE: 'Nenhuma ocorrencia ou leitura ESG registrada.',
+  TREINAMENTOS: 'Sem requisito de capacitacao cadastrado na matriz.',
 };
 
 /* -------------------------------------------------------------------------- */
@@ -177,11 +179,20 @@ export async function painelExecutivo(filtro: FiltroDashboard = {}) {
 
   const seguranca = await notaDeSeguranca(ondeObservacao);
 
+  const [treinamentos, auditorias, meioAmbiente] = await Promise.all([
+    notaDeTreinamentos({ clienteId: filtro.clienteId }),
+    notaDeAuditorias({ clienteId: filtro.clienteId }),
+    notaDeMeioAmbiente({ clienteId: filtro.clienteId }),
+  ]);
+
   const notas: Partial<Record<PilarIndiceGlobal, number | null>> = {
     SEGURANCA: seguranca.nota,
     CULTURA_SEGURANCA: bbs.icsg.pesoConsiderado > 0 ? bbs.icsg.valor : null,
     GESTAO_RISCOS: riscos.nota,
     PLANO_ACAO: planos.percentualConcluido,
+    AUDITORIAS: auditorias,
+    MEIO_AMBIENTE: meioAmbiente,
+    TREINAMENTOS: treinamentos,
   };
 
   const indiceGlobal = calcularIndiceGlobalSsma(notas);
@@ -191,6 +202,8 @@ export async function painelExecutivo(filtro: FiltroDashboard = {}) {
     CULTURA_SEGURANCA: notas.CULTURA_SEGURANCA,
     BBS: bbs.bbs.totalBbs > 0 ? bbs.bbs.ics : null,
     PLANO_ACAO: planos.percentualConcluido,
+    AUDITORIAS: auditorias,
+    TREINAMENTOS: treinamentos,
   });
 
   const [clientesAtivos, colaboradores, terceirosAtivos, areasAtivas] = await prisma.$transaction([
@@ -262,11 +275,14 @@ async function rankingPorCliente(empresaId: string, filtro: FiltroDashboard) {
 
   const linhas = await Promise.all(
     clientes.map(async (cliente) => {
-      const [bbs, planos, seguranca, riscos] = await Promise.all([
+      const [bbs, planos, seguranca, riscos, treinamentosCliente, auditoriasCliente, meioAmbienteCliente] = await Promise.all([
         painelBbs(filtroDeIndicadores({ clienteId: cliente.id, meses: filtro.meses })),
         resumoPlanos({ clienteId: cliente.id }),
         notaDeSeguranca({ clienteId: cliente.id }),
         notaDeGestaoDeRiscos({ clienteId: cliente.id }, empresaId),
+        notaDeTreinamentos({ clienteId: cliente.id }),
+        notaDeAuditorias({ clienteId: cliente.id }),
+        notaDeMeioAmbiente({ clienteId: cliente.id }),
       ]);
 
       const indice = calcularIndiceGlobalSsma({
@@ -274,6 +290,9 @@ async function rankingPorCliente(empresaId: string, filtro: FiltroDashboard) {
         CULTURA_SEGURANCA: bbs.icsg.pesoConsiderado > 0 ? bbs.icsg.valor : null,
         GESTAO_RISCOS: riscos.nota,
         PLANO_ACAO: planos.percentualConcluido,
+        AUDITORIAS: auditoriasCliente,
+        MEIO_AMBIENTE: meioAmbienteCliente,
+        TREINAMENTOS: treinamentosCliente,
       });
 
       return {
@@ -407,9 +426,60 @@ export async function painelGerencial(filtro: FiltroDashboard = {}) {
     }),
   );
 
+  /*
+   * Score composto por area (secao 23 do plano diretor): desvios do mes +
+   * inspecao em dia + planos abertos, na convencao documentada no shared.
+   */
+  const inicio30 = new Date();
+  inicio30.setDate(inicio30.getDate() - 30);
+
+  const [desviosPorArea, planosPorArea] = await Promise.all([
+    prisma.observacao.groupBy({
+      by: ['areaId'],
+      where: {
+        tipo: { in: ['COMPORTAMENTO_INSEGURO', 'CONDICAO_INSEGURA'] },
+        dataHora: { gte: inicio30 },
+        ...(filtro.clienteId ? { clienteId: filtro.clienteId } : {}),
+      },
+      _count: { _all: true },
+      orderBy: { areaId: 'asc' },
+    }),
+    prisma.planoAcao.groupBy({
+      by: ['areaId'],
+      where: {
+        status: { in: ['ABERTO', 'EM_ANDAMENTO'] },
+        areaId: { not: null },
+        ...(filtro.clienteId ? { clienteId: filtro.clienteId } : {}),
+      },
+      _count: { _all: true },
+      orderBy: { areaId: 'asc' },
+    }),
+  ]);
+
+  const desviosArea = new Map(desviosPorArea.map((linha) => [linha.areaId, linha._count._all]));
+  const planosArea = new Map(planosPorArea.map((linha) => [linha.areaId, linha._count._all]));
+
+  const scoreAreas = riscos.linhas
+    .map((linha) => {
+      const desvios30Dias = desviosArea.get(linha.areaId) ?? 0;
+      const planosAbertos = planosArea.get(linha.areaId) ?? 0;
+      return {
+        areaId: linha.areaId,
+        area: linha.area,
+        codigo: linha.codigo,
+        cliente: linha.cliente,
+        desvios30Dias,
+        inspecaoEmDia: linha.emDia,
+        planosAbertos,
+        score: calcularScoreArea({ desvios30Dias, inspecaoEmDia: linha.emDia, planosAbertos }),
+      };
+    })
+    .sort((a, b) => a.score - b.score);
+
   return {
     geradoEm: new Date(),
     filtro,
+    scoreAreas,
     icsg: bbs.icsg,
     bbs: bbs.bbs,
     pareto: bbs.pareto,
@@ -470,6 +540,7 @@ export async function painelOperacional(filtro: FiltroDashboard = {}) {
         responsavelNome: true,
         cliente: { select: { nomeFantasia: true } },
         area: { select: { nome: true, codigo: true } },
+        observacao: { select: { tipo: true, classificacaoBird: true, grauRisco: true } },
       },
     }),
     prisma.observacao.findMany({
@@ -497,12 +568,12 @@ export async function painelOperacional(filtro: FiltroDashboard = {}) {
   ]);
 
   const planos = planosAbertos.map((plano) => {
-    const horasDesdeORegistro = (agora.getTime() - plano.criadoEm.getTime()) / MS_POR_HORA;
-    const prazoHoras = Math.max(0, (plano.prazo.getTime() - plano.criadoEm.getTime()) / MS_POR_HORA);
-    const situacao = calcularEscalonamento(horasDesdeORegistro, prazoHoras);
+    // Mesma escada usada pelo escalonamento real — senao o "pendente" mentiria.
+    const situacao = situacaoDoPlano(plano, agora);
 
     return {
       ...plano,
+      observacao: undefined,
       diasParaPrazo: Math.ceil((plano.prazo.getTime() - agora.getTime()) / MS_POR_DIA),
       atrasado: plano.prazo < agora,
       venceEmBreve: plano.prazo >= agora && plano.prazo <= emSeteDias,

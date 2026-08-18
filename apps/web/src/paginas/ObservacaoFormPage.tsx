@@ -267,6 +267,22 @@ export function ObservacaoFormPage() {
     );
   }
 
+  interface EventoTimeline {
+    quando: string;
+    titulo: string;
+    detalhe: string;
+    tipo: string;
+  }
+  const [timeline, setTimeline] = useState<EventoTimeline[]>([]);
+
+  useEffect(() => {
+    if (!id) return;
+    void api
+      .get<{ eventos: EventoTimeline[] }>(`/observacoes/${id}/timeline`)
+      .then((resposta) => setTimeline(resposta.eventos))
+      .catch(() => setTimeline([]));
+  }, [id, observacao]);
+
   const erro = (campo: keyof ObservacaoFormValues) => errors[campo]?.message as string | undefined;
   const causasDoTipo = causas.filter((causa) => causa.tipo === valores.tipo);
   const fotoAtual = urlAbsoluta(valores.fotoUrl);
@@ -574,9 +590,9 @@ export function ObservacaoFormPage() {
                     <dd>
                       {observacao.comunicacao.email ? 'e-mail' : ''}
                       {observacao.comunicacao.whatsapp === 'OBRIGATORIO'
-                        ? ' · <Icone nome="mensagem" /> WhatsApp'
+                        ? ' · WhatsApp'
                         : observacao.comunicacao.whatsapp === 'OPCIONAL'
-                          ? ' · <Icone nome="mensagem" /> WhatsApp (opcional)'
+                          ? ' · WhatsApp (opcional)'
                           : ''}
                     </dd>
                     <dt>Destinatários</dt>
@@ -620,6 +636,25 @@ export function ObservacaoFormPage() {
           </aside>
         </div>
       </form>
+
+      {modoEdicao && timeline.length > 0 ? (
+        <div className="painel">
+          <h3><Icone nome="relogio" /> Linha do tempo da ocorrência</h3>
+          <p className="desc">
+            Registro → comunicação → plano → tratativa → evidência → encerramento. Tudo derivado dos dados reais — é a
+            rastreabilidade que sustenta auditoria e investigação.
+          </p>
+          <div className="timeline">
+            {timeline.map((evento, indice) => (
+              <div className={`timeline-evento ${evento.tipo.toLowerCase()}`} key={`${evento.tipo}-${indice}`}>
+                <div className="timeline-quando">{formatarDataHora(evento.quando)}</div>
+                <div className="timeline-titulo">{evento.titulo}</div>
+                <div className="timeline-detalhe">{evento.detalhe}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
     </>
   );
 }

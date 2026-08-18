@@ -197,7 +197,36 @@ export function calcularScoreMaturidade(
   return calcularIndicePonderado(PESOS_MATURIDADE, notas);
 }
 
+/* -------------------------------------------------------------------------- */
+/* Niveis de maturidade (1-5)                                                  */
+/* -------------------------------------------------------------------------- */
+
+export interface NivelMaturidade {
+  nivel: 1 | 2 | 3 | 4 | 5;
+  nome: string;
+  descricao: string;
+  /** Score minimo para o nivel. */
+  minimo: number;
+}
+
+/**
+ * Escala do plano diretor (Reativo → Inteligente). Os cortes numericos sao
+ * **convencao editavel** — o plano nomeia os niveis mas nao fixa limiares.
+ */
+export const NIVEIS_MATURIDADE: readonly NivelMaturidade[] = [
+  { nivel: 5, nome: 'Inteligente', descricao: 'Dados antecipam o risco; melhoria continua instalada', minimo: 90 },
+  { nivel: 4, nome: 'Proativo', descricao: 'Previne antes de ocorrer; lideranca engajada', minimo: 75 },
+  { nivel: 3, nome: 'Preventivo', descricao: 'Rotinas de prevencao funcionando com lacunas', minimo: 60 },
+  { nivel: 2, nome: 'Controlado', descricao: 'Reage bem, previne pouco', minimo: 40 },
+  { nivel: 1, nome: 'Reativo', descricao: 'Age depois que o problema acontece', minimo: 0 },
+];
+
+export function nivelDeMaturidade(score: number): NivelMaturidade {
+  return NIVEIS_MATURIDADE.find((nivel) => score >= nivel.minimo) ?? NIVEIS_MATURIDADE[NIVEIS_MATURIDADE.length - 1]!;
+}
+
 /** Confere se uma tabela de pesos fecha 100% — usado nos testes e na configuracao. */
+
 export function somaDosPesos(pesos: readonly PesoPilar[]): number {
   return pesos.reduce((soma, peso) => soma + peso.peso, 0);
 }

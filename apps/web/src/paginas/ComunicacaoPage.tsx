@@ -14,7 +14,13 @@ import { Campo } from '../componentes/Campo';
 import { useToast } from '../componentes/Toast';
 import { ErroApi, api } from '../lib/api';
 import { formatarDataHora } from '../lib/datas';
-import type { NotificacaoApi, ResumoNotificacoes } from '../lib/plano-form';
+import {
+  PILL_PRIORIDADE_NOTIFICACAO,
+  ROTULO_CANAL_NOTIFICACAO,
+  ROTULO_PRIORIDADE_NOTIFICACAO,
+  type NotificacaoApi,
+  type ResumoNotificacoes,
+} from '../lib/plano-form';
 
 interface OpcaoCliente {
   id: string;
@@ -31,6 +37,11 @@ const RESUMO_VAZIO: ResumoNotificacoes = {
   enviadas: 0,
   falhas: 0,
   porEscalonamento: 0,
+  voz: 0,
+  agrupadas: 0,
+  criticas: 0,
+  tempoMedioRespostaHoras: null,
+  planosRespondidos: 0,
 };
 
 const PILL_STATUS: Record<StatusNotificacao, string> = {
@@ -154,6 +165,18 @@ export function ComunicacaoPage() {
           </div>
         </div>
         <div className="stat">
+          <div className="lbl">Ligação de voz</div>
+          <div className="num" style={{ color: 'var(--purple)' }}>
+            {resumo.voz}
+          </div>
+          <div className="sub">Risco I fora do horário comercial</div>
+        </div>
+        <div className="stat">
+          <div className="lbl">Tempo médio de resposta</div>
+          <div className="num">{resumo.tempoMedioRespostaHoras !== null ? `${resumo.tempoMedioRespostaHoras}h` : '—'}</div>
+          <div className="sub">até o plano entrar em andamento · {resumo.planosRespondidos} respondido(s)</div>
+        </div>
+        <div className="stat">
           <div className="lbl">Por escalonamento</div>
           <div className="num" style={{ color: resumo.porEscalonamento > 0 ? 'var(--red)' : 'var(--gray)' }}>
             {resumo.porEscalonamento}
@@ -262,9 +285,15 @@ export function ComunicacaoPage() {
                       <tr key={notificacao.id}>
                         <td>{formatarDataHora(notificacao.criadoEm)}</td>
                         <td>
-                          <span className={`pill ${notificacao.canal === 'EMAIL' ? 'info' : 'ok'}`}>
-                            {notificacao.canal === 'EMAIL' ? 'E-mail' : 'WhatsApp'}
+                          <span
+                            className={`pill ${notificacao.canal === 'EMAIL' ? 'info' : notificacao.canal === 'VOZ' ? 'purple' : 'ok'}`}
+                          >
+                            {ROTULO_CANAL_NOTIFICACAO[notificacao.canal]}
+                          </span>{' '}
+                          <span className={`pill ${PILL_PRIORIDADE_NOTIFICACAO[notificacao.prioridade]}`}>
+                            {ROTULO_PRIORIDADE_NOTIFICACAO[notificacao.prioridade]}
                           </span>
+                          {notificacao.agrupada ? <span className="pill gray"> Resumo agrupado</span> : null}
                           {notificacao.nivelEscalonamento > 0 ? (
                             <div className="secundario" style={{ color: 'var(--red)' }}>
                               escalonamento nível {notificacao.nivelEscalonamento}

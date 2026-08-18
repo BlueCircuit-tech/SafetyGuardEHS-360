@@ -187,7 +187,7 @@ export type PlanoAcaoFiltro = z.output<typeof planoAcaoFiltroSchema>;
 /* Notificacoes                                                                */
 /* -------------------------------------------------------------------------- */
 
-export const CANAIS_NOTIFICACAO = ['EMAIL', 'WHATSAPP'] as const;
+export const CANAIS_NOTIFICACAO = ['EMAIL', 'WHATSAPP', 'VOZ'] as const;
 export type CanalNotificacao = (typeof CANAIS_NOTIFICACAO)[number];
 
 /**

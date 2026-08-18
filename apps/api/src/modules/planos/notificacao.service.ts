@@ -1,5 +1,8 @@
 import type { CanalNotificacao, Prisma, PrismaClient } from '@prisma/client';
 import {
+  JANELA_AGRUPAMENTO_HORAS,
+  canaisDoDisparo,
+  deveAgrupar,
   montarCabecalhoInstitucional,
   montarMensagensAlerta,
   type NivelHierarquia,
@@ -39,6 +42,9 @@ export interface ContextoNotificacao {
   nivelAcionado?: NivelHierarquia | null;
   nivelEscalonamento?: number;
   codigoPlano?: string | null;
+  /** Area e tipo da observacao de origem — base da regra de agrupamento. */
+  areaId?: string | null;
+  tipoObservacao?: string | null;
 }
 
 /**
@@ -49,9 +55,36 @@ export interface ContextoNotificacao {
 export async function registrarNotificacoes(
   db: ClientePrisma,
   contexto: ContextoNotificacao,
-): Promise<{ canais: CanalNotificacao[] }> {
+): Promise<{ canais: CanalNotificacao[]; agrupada: boolean }> {
   const empresa = await obterEmpresaOuFalhar();
   const cabecalho = montarCabecalhoInstitucional(empresa);
+  const agora = new Date();
+
+  /*
+   * Agrupamento (aba Parametros da matriz): acima de 5 ocorrencias na mesma
+   * area/tipo em 1 hora, o disparo individual vira resumo agrupado. Vale so
+   * para o aviso inicial — escalonamento e sempre individual, porque cobra um
+   * plano especifico. Risco I nunca agrupa (a matriz o marca INDIVIDUAL).
+   */
+  let agrupada = false;
+  const ehEscalonamento = (contexto.nivelEscalonamento ?? 0) > 0;
+
+  if (!ehEscalonamento && contexto.regra.disparo !== 'INDIVIDUAL') {
+    let naJanela = 0;
+
+    if (contexto.regra.disparo === 'AGRUPAVEL' && contexto.areaId && contexto.tipoObservacao) {
+      const inicioJanela = new Date(agora.getTime() - JANELA_AGRUPAMENTO_HORAS * 60 * 60 * 1000);
+      naJanela = await db.observacao.count({
+        where: {
+          areaId: contexto.areaId,
+          tipo: contexto.tipoObservacao as never,
+          dataHora: { gte: inicioJanela },
+        },
+      });
+    }
+
+    agrupada = deveAgrupar(contexto.regra.disparo, naJanela);
+  }
 
   const mensagens = montarMensagensAlerta({
     cabecalho,
@@ -77,27 +110,35 @@ export async function registrarNotificacoes(
     observacaoId: contexto.observacaoId ?? null,
     destinatarios: contexto.regra.destinatarios.join(','),
     nivelEscalonamento: contexto.nivelEscalonamento ?? 0,
+    prioridade: contexto.regra.prioridade,
+    agrupada,
+    // Declarado pela matriz; o disparo real do fallback exige provedor com
+    // confirmacao de entrega, que ainda nao existe.
+    canalFallback: contexto.regra.canalFallback,
     // Sem provedor configurado: fica registrada, nao enviada.
     status: 'SIMULADA' as const,
   };
 
-  const canais: CanalNotificacao[] = [];
+  // Horario comercial: fora de 07:00-18:00/seg-sex, Risco I soma o canal de voz.
+  const canais = canaisDoDisparo(contexto.regra, agora) as CanalNotificacao[];
 
-  if (contexto.regra.email) {
+  for (const canal of canais) {
     await db.notificacao.create({
-      data: { ...base, canal: 'EMAIL', assunto: mensagens.emailAssunto, corpo: mensagens.emailCorpo },
+      data: {
+        ...base,
+        canal,
+        assunto: canal === 'EMAIL' ? mensagens.emailAssunto : null,
+        corpo:
+          canal === 'EMAIL'
+            ? mensagens.emailCorpo
+            : canal === 'WHATSAPP'
+              ? mensagens.whatsapp
+              : `[LIGACAO DE VOZ] Risco I fora do horario comercial. ${mensagens.emailAssunto}`,
+      },
     });
-    canais.push('EMAIL');
   }
 
-  if (contexto.regra.whatsapp !== 'NAO') {
-    await db.notificacao.create({
-      data: { ...base, canal: 'WHATSAPP', assunto: null, corpo: mensagens.whatsapp },
-    });
-    canais.push('WHATSAPP');
-  }
-
-  return { canais };
+  return { canais, agrupada };
 }
 
 /* -------------------------------------------------------------------------- */
@@ -145,15 +186,58 @@ export async function resumoNotificacoes(clienteId?: string) {
     ...(clienteId ? { clienteId } : {}),
   };
 
-  const [total, email, whatsapp, simuladas, enviadas, falhas, escalonamentos] = await prisma.$transaction([
-    prisma.notificacao.count({ where: base }),
-    prisma.notificacao.count({ where: { ...base, canal: 'EMAIL' } }),
-    prisma.notificacao.count({ where: { ...base, canal: 'WHATSAPP' } }),
-    prisma.notificacao.count({ where: { ...base, status: 'SIMULADA' } }),
-    prisma.notificacao.count({ where: { ...base, status: 'ENVIADA' } }),
-    prisma.notificacao.count({ where: { ...base, status: 'FALHOU' } }),
-    prisma.notificacao.count({ where: { ...base, nivelEscalonamento: { gt: 0 } } }),
-  ]);
+  const [total, email, whatsapp, voz, simuladas, enviadas, falhas, escalonamentos, agrupadas, criticas] =
+    await prisma.$transaction([
+      prisma.notificacao.count({ where: base }),
+      prisma.notificacao.count({ where: { ...base, canal: 'EMAIL' } }),
+      prisma.notificacao.count({ where: { ...base, canal: 'WHATSAPP' } }),
+      prisma.notificacao.count({ where: { ...base, canal: 'VOZ' } }),
+      prisma.notificacao.count({ where: { ...base, status: 'SIMULADA' } }),
+      prisma.notificacao.count({ where: { ...base, status: 'ENVIADA' } }),
+      prisma.notificacao.count({ where: { ...base, status: 'FALHOU' } }),
+      prisma.notificacao.count({ where: { ...base, nivelEscalonamento: { gt: 0 } } }),
+      prisma.notificacao.count({ where: { ...base, agrupada: true } }),
+      prisma.notificacao.count({ where: { ...base, prioridade: 'CRITICA' } }),
+    ]);
 
-  return { total, email, whatsapp, simuladas, enviadas, falhas, porEscalonamento: escalonamentos };
+  /*
+   * Tempo medio de resposta — definicao da matriz: "resposta" e o status do
+   * plano mudar para Em andamento, nao a abertura do e-mail.
+   */
+  const respondidos = await prisma.planoAcao.findMany({
+    where: {
+      cliente: { empresaId: empresa.id },
+      ...(clienteId ? { clienteId } : {}),
+      dataInicioTratativa: { not: null },
+    },
+    select: { criadoEm: true, dataInicioTratativa: true },
+  });
+
+  const tempoMedioRespostaHoras =
+    respondidos.length > 0
+      ? Math.round(
+          (respondidos.reduce(
+            (soma, plano) => soma + (plano.dataInicioTratativa!.getTime() - plano.criadoEm.getTime()),
+            0,
+          ) /
+            respondidos.length /
+            (60 * 60 * 1000)) *
+            10,
+        ) / 10
+      : null;
+
+  return {
+    total,
+    email,
+    whatsapp,
+    voz,
+    simuladas,
+    enviadas,
+    falhas,
+    porEscalonamento: escalonamentos,
+    agrupadas,
+    criticas,
+    tempoMedioRespostaHoras,
+    planosRespondidos: respondidos.length,
+  };
 }

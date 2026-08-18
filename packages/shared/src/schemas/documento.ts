@@ -20,6 +20,11 @@ export const TIPOS_DOCUMENTO = [
   'ART_RT',
   'CERTIFICADO_TREINAMENTO',
   'PROCEDIMENTO',
+  'APR_AST',
+  'PERMISSAO_TRABALHO',
+  'FISPQ',
+  'PAE',
+  'PCMAT',
   'OUTRO',
 ] as const;
 export type TipoDocumento = (typeof TIPOS_DOCUMENTO)[number];
@@ -153,6 +158,48 @@ export const CATALOGO_DOCUMENTOS: readonly DefinicaoDocumento[] = [
     categoria: 'OUTRO',
   },
   {
+    tipo: 'APR_AST',
+    rotulo: 'APR / AST',
+    descricao: 'Analise Preliminar de Risco / Analise de Seguranca da Tarefa',
+    // Vale por atividade, nao por prazo — a validade fica em aberto.
+    validadeMeses: null,
+    exigeResponsavelTecnico: false,
+    categoria: 'SEGURANCA',
+  },
+  {
+    tipo: 'PERMISSAO_TRABALHO',
+    rotulo: 'Permissao de Trabalho',
+    descricao: 'PT para atividades de risco (altura, a quente, espaco confinado)',
+    validadeMeses: null,
+    exigeResponsavelTecnico: false,
+    categoria: 'SEGURANCA',
+  },
+  {
+    tipo: 'FISPQ',
+    rotulo: 'FISPQ / FDS',
+    descricao: 'Ficha de Seguranca de Produto Quimico (NR-26 / ABNT 14725)',
+    // Sem prazo legal; revisao tipica a cada 3 anos pela pratica da 14725.
+    validadeMeses: 36,
+    exigeResponsavelTecnico: false,
+    categoria: 'SEGURANCA',
+  },
+  {
+    tipo: 'PAE',
+    rotulo: 'PAE',
+    descricao: 'Plano de Atendimento a Emergencias',
+    validadeMeses: 12,
+    exigeResponsavelTecnico: false,
+    categoria: 'SEGURANCA',
+  },
+  {
+    tipo: 'PCMAT',
+    rotulo: 'PCMAT / PGR da Construcao',
+    descricao: 'Programa de Gerenciamento de Riscos da construcao (NR-18)',
+    validadeMeses: 24,
+    exigeResponsavelTecnico: true,
+    categoria: 'SEGURANCA',
+  },
+  {
     tipo: 'OUTRO',
     rotulo: 'Outro',
     descricao: 'Documento nao catalogado',
@@ -184,7 +231,7 @@ export const ROTULO_TIPO_DOCUMENTO = Object.fromEntries(
  * O mesmo PGR pode valer para o contrato inteiro, para uma area especifica ou
  * para uma contratada — e a cobranca muda conforme o alcance.
  */
-export const ABRANGENCIAS_DOCUMENTO = ['CLIENTE', 'AREA', 'TERCEIRO', 'COLABORADOR'] as const;
+export const ABRANGENCIAS_DOCUMENTO = ['CLIENTE', 'AREA', 'TERCEIRO', 'COLABORADOR', 'OCORRENCIA'] as const;
 export type AbrangenciaDocumento = (typeof ABRANGENCIAS_DOCUMENTO)[number];
 
 export const ROTULO_ABRANGENCIA_DOCUMENTO: Record<AbrangenciaDocumento, string> = {
@@ -192,6 +239,7 @@ export const ROTULO_ABRANGENCIA_DOCUMENTO: Record<AbrangenciaDocumento, string> 
   AREA: 'Area especifica',
   TERCEIRO: 'Empresa contratada',
   COLABORADOR: 'Colaborador',
+  OCORRENCIA: 'Ocorrencia de campo',
 };
 
 export const SITUACOES_DOCUMENTO = ['ATIVO', 'SUBSTITUIDO', 'CANCELADO'] as const;
@@ -223,6 +271,8 @@ const documentoBaseSchema = z.object({
   areaId: opcional(z.string().uuid('Area invalida.')),
   terceiroId: opcional(z.string().uuid('Empresa contratada invalida.')),
   colaboradorId: opcional(z.string().uuid('Colaborador invalido.')),
+  /** APR, AST, PT ou FISPQ presa a uma ocorrencia especifica (secoes 14/16 do plano). */
+  observacaoId: opcional(z.string().uuid('Observacao invalida.')),
 
   /* --- Identificacao ------------------------------------------------------ */
   tipo: z.enum(TIPOS_DOCUMENTO, {
@@ -252,17 +302,22 @@ const documentoBaseSchema = z.object({
 });
 
 /** Cada abrangencia exige o seu alvo — senao "documento da area" fica sem area. */
-const ALVO_POR_ABRANGENCIA: Record<AbrangenciaDocumento, 'areaId' | 'terceiroId' | 'colaboradorId' | null> = {
+const ALVO_POR_ABRANGENCIA: Record<
+  AbrangenciaDocumento,
+  'areaId' | 'terceiroId' | 'colaboradorId' | 'observacaoId' | null
+> = {
   CLIENTE: null,
   AREA: 'areaId',
   TERCEIRO: 'terceiroId',
   COLABORADOR: 'colaboradorId',
+  OCORRENCIA: 'observacaoId',
 };
 
-const ROTULO_ALVO: Record<'areaId' | 'terceiroId' | 'colaboradorId', string> = {
+const ROTULO_ALVO: Record<'areaId' | 'terceiroId' | 'colaboradorId' | 'observacaoId', string> = {
   areaId: 'a area',
   terceiroId: 'a empresa contratada',
   colaboradorId: 'o colaborador',
+  observacaoId: 'a ocorrencia',
 };
 
 function validarDocumento(
@@ -272,6 +327,7 @@ function validarDocumento(
     areaId?: string | null;
     terceiroId?: string | null;
     colaboradorId?: string | null;
+    observacaoId?: string | null;
     dataEmissao?: Date;
     validade?: Date | null;
     responsavelNome?: string | null;
@@ -327,6 +383,7 @@ export const documentoFiltroSchema = z.object({
   areaId: z.string().uuid('Area invalida.').optional(),
   terceiroId: z.string().uuid('Empresa contratada invalida.').optional(),
   colaboradorId: z.string().uuid('Colaborador invalido.').optional(),
+  observacaoId: z.string().uuid('Observacao invalida.').optional(),
   tipo: z.enum(TIPOS_DOCUMENTO).optional(),
   abrangencia: z.enum(ABRANGENCIAS_DOCUMENTO).optional(),
   situacao: z.enum(SITUACOES_DOCUMENTO).optional(),

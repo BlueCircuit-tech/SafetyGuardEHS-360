@@ -817,6 +817,29 @@ Cada item traz a situação derivada do exame:
 
 `situacaoAso` é `VIGENTE` · `A_VENCER` · `VENCIDO` · `SEM_VALIDADE` · `SEM_ASO`.
 
+### `GET /api/v1/colaboradores/:id/ppp`
+
+Monta o PPP na leitura, cruzando cadastro, inventário de riscos (área **ou**
+função), histórico de ASO e entregas de EPI. Permissão `saude:ler`.
+
+```json
+{
+  "fontes": { "fatoresDeRisco": "Inventario de riscos da area e da funcao (Etapa 19)" },
+  "trabalhador": { "nome": "Bruno Sales", "funcao": "Operador de ponte rolante", "vinculo": "Proprio do cliente" },
+  "fatoresDeRisco": [
+    { "tipo": "Fisico", "perigo": "Ruido continuo acima de 85 dB(A)",
+      "intensidade": "Avaliacao qualitativa — IIR 500 (grau I)", "origem": "AREA" }
+  ],
+  "pendencias": ["Sem historico de ASO registrado."]
+}
+```
+
+As **pendências fazem parte da resposta**, não são erro: documento incompleto
+ainda serve para ver o que falta. `intensidade` declara que a avaliação é
+qualitativa — o PPP previdenciário pede medição, e disfarçar uma de outra seria
+o erro mais caro do documento. Detalhes em
+[`etapa-20-ppp.md`](etapa-20-ppp.md).
+
 ### `POST /api/v1/asos`
 
 `validade` em branco é calculada pela periodicidade do grau de risco
@@ -909,3 +932,21 @@ contratada.
   "planos": [], "observacoes": [], "areasAtrasadas": [], "renovacoes": [], "impedidos": []
 }
 ```
+
+---
+
+## Matriz de Comunicação SGI 360 (revisão)
+
+A matriz foi realinhada à planilha `Matriz_Comunicacao_Automatica_SGI_360.xlsx`.
+Mudanças de contrato:
+
+- **`GET /planos-acao/escalonamento/niveis`** agora devolve as escadas **por
+  classificação** (evento, grau, ação, prioridade, fallback, modo de disparo e
+  degraus em horas desde o registro), não mais uma escada única.
+- **`Notificacao`** ganhou `prioridade` (`CRITICA`/`ALTA`/`MEDIA`/`BAIXA`),
+  `agrupada` (resumo agrupado) e `canalFallback` (`VOZ`/`EMAIL_REFORCO`).
+- **Canal `VOZ`**: gerado para Risco I fora do horário comercial
+  (07:00–18:00, seg–sex).
+- **`GET /notificacoes/resumo`** ganhou `voz`, `agrupadas`, `criticas`,
+  `tempoMedioRespostaHoras` e `planosRespondidos`. "Resposta" = o plano mudar
+  para Em andamento (`dataInicioTratativa` no `PlanoAcao`).

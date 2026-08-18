@@ -50,6 +50,7 @@ import {
   revisarDocumento,
 } from './documento.service.js';
 import { filaDeRenovacao, painelConformidade } from './conformidade.service.js';
+import { montarPpp } from './ppp.service.js';
 import { MIMES_DOCUMENTO_ACEITOS, removerArquivoPublico, salvarDocumento } from '../../lib/arquivos.js';
 import { RequisicaoInvalida } from '../../lib/erros.js';
 import { contextoDeAuditoria } from '../../lib/autenticacao.js';
@@ -135,6 +136,16 @@ export async function registrarRotasSaude(app: FastifyInstance): Promise<void> {
     const colaborador = await obterColaboradorOuFalhar(id);
 
     return { ...colaborador, cpfFormatado: formatarCpf(colaborador.cpf) };
+  });
+
+  /**
+   * PPP consolidado: vinculo + funcao + riscos do inventario + ASO + EPI.
+   * A resposta traz as `fontes` de cada bloco e as `pendencias` que impedem a
+   * emissao — documento incompleto ainda serve para ver o que falta.
+   */
+  app.get('/colaboradores/:id/ppp', async (request) => {
+    const { id } = paramsSchema.parse(request.params);
+    return montarPpp(id);
   });
 
   app.get('/colaboradores/:id/auditoria', async (request) => {
