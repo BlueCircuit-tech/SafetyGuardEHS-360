@@ -147,6 +147,10 @@ const areaBaseSchema = z.object({
   latitude: opcional(z.coerce.number().min(-90, 'Latitude invalida.').max(90, 'Latitude invalida.')),
   longitude: opcional(z.coerce.number().min(-180, 'Longitude invalida.').max(180, 'Longitude invalida.')),
   pontoReferencia: opcional(z.string().trim().max(150)),
+  /** Posicao X (0–100%) da area sobre a imagem de planta baixa do cliente. */
+  coordPlantaX: opcional(z.coerce.number().min(0, 'Coordenada X deve estar entre 0 e 100.').max(100, 'Coordenada X deve estar entre 0 e 100.')),
+  /** Posicao Y (0–100%) da area sobre a imagem de planta baixa do cliente. */
+  coordPlantaY: opcional(z.coerce.number().min(0, 'Coordenada Y deve estar entre 0 e 100.').max(100, 'Coordenada Y deve estar entre 0 e 100.')),
 
   /* --- Inspecao ------------------------------------------------------------ */
   /** Periodicidade minima de inspecao, em dias. */

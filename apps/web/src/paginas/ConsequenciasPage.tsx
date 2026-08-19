@@ -145,6 +145,12 @@ export function ConsequenciasPage() {
               <b style={{ color: resumo.reincidentes > 0 ? 'var(--red)' : undefined }}>{resumo.reincidentes}</b>
               <span>colaboradores reincidentes</span>
             </div>
+            <div className="stat">
+              <b style={{ color: resumo.reincidentes > 0 ? 'var(--red)' : undefined }}>
+                {resumo.total > 0 ? ((resumo.reincidentes / resumo.total) * 100).toFixed(1) : '0.0'}%
+              </b>
+              <span>taxa de reincidência</span>
+            </div>
             {resumo.porMedida.map((linha) => (
               <div className="stat" key={linha.medida}>
                 <b>{linha.quantidade}</b>

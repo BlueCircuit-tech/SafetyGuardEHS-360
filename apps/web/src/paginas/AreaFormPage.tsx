@@ -450,6 +450,23 @@ export function AreaFormPage() {
                   </Campo>
                 </div>
 
+                <div className="row3">
+                  <Campo
+                    label="Coordenada X na planta (%)"
+                    erro={erro('coordPlantaX')}
+                    ajuda="Posição horizontal (0–100) sobre a imagem de planta baixa do cliente. Usado no mapa de calor."
+                  >
+                    <input type="number" min={0} max={100} step={0.1} {...register('coordPlantaX')} placeholder="Ex.: 35.5" />
+                  </Campo>
+                  <Campo
+                    label="Coordenada Y na planta (%)"
+                    erro={erro('coordPlantaY')}
+                    ajuda="Posição vertical (0–100) sobre a imagem de planta baixa do cliente."
+                  >
+                    <input type="number" min={0} max={100} step={0.1} {...register('coordPlantaY')} placeholder="Ex.: 60.0" />
+                  </Campo>
+                </div>
+
                 <Campo label="Observações" erro={erro('observacoes')}>
                   <textarea {...register('observacoes')} />
                 </Campo>

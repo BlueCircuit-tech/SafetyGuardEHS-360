@@ -49,6 +49,7 @@ export interface ClienteApi {
   cidade: string;
   uf: string;
   logoUrl: string | null;
+  imagemPlantaUrl: string | null;
   corDestaque: string;
   observacoes: string | null;
   criadoEm: string;
@@ -118,6 +119,7 @@ export const VALORES_INICIAIS_CLIENTE: ClienteFormValues = {
   cidade: '',
   uf: '',
   logoUrl: '',
+  imagemPlantaUrl: '',
   corDestaque: COR_DESTAQUE_PADRAO,
   observacoes: '',
 };
@@ -164,6 +166,7 @@ export function clienteParaFormulario(cliente: ClienteApi): ClienteFormValues {
     cidade: cliente.cidade,
     uf: cliente.uf,
     logoUrl: texto(cliente.logoUrl),
+    imagemPlantaUrl: texto(cliente.imagemPlantaUrl),
     corDestaque: cliente.corDestaque,
     observacoes: texto(cliente.observacoes),
   };

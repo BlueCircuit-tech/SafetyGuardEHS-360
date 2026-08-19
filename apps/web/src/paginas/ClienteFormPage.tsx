@@ -666,6 +666,14 @@ export function ClienteFormPage() {
                   </Campo>
                 </div>
 
+                <Campo
+                  label="URL da planta baixa"
+                  erro={erro('imagemPlantaUrl')}
+                  ajuda="Endereço (https://...) de uma imagem da planta da instalação. Usada no Mapa de calor por planta para posicionar as áreas."
+                >
+                  <input type="url" {...register('imagemPlantaUrl')} placeholder="https://exemplo.com/planta-baixa.png" />
+                </Campo>
+
                 <Campo label="Observações" erro={erro('observacoes')}>
                   <textarea {...register('observacoes')} placeholder="Particularidades do contrato, restrições de acesso, contatos alternativos." />
                 </Campo>

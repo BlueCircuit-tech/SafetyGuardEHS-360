@@ -331,10 +331,12 @@ model Cliente {
   uf          String  @db.Char(2)
 
   // --- Identidade e anotacoes ---------------------------------------------
-  logoUrl     String? @db.VarChar(300)
+  logoUrl         String? @db.VarChar(300)
+  /// Imagem de planta baixa para o mapa de calor por coordenada.
+  imagemPlantaUrl String? @db.VarChar(300)
   /// Cor da serie do cliente nos graficos comparativos.
-  corDestaque String  @default("#2563eb") @db.VarChar(7)
-  observacoes String? @db.VarChar(1000)
+  corDestaque     String  @default("#2563eb") @db.VarChar(7)
+  observacoes     String? @db.VarChar(1000)
 
   criadoEm     DateTime @default(now())
   atualizadoEm DateTime @updatedAt
@@ -353,6 +355,7 @@ model Cliente {
   inventarioRiscos      InventarioRisco[]
   notificacoes          Notificacao[]
   usuarios              Usuario[]
+  afastamentos          Afastamento[]
 
   @@unique([empresaId, cnpj])
   @@unique([empresaId, numeroContrato])
@@ -542,6 +545,12 @@ model Area {
   frequenciaInspecaoDias Int          @default(30)
   situacao               SituacaoArea @default(ATIVA)
   observacoes            String?      @db.VarChar(1000)
+
+  // --- Mapa de calor por planta (coordenadas relativas 0-100) ---------------
+  /// Posicao horizontal (%) na imagem de planta do cliente. Null = sem coordenada.
+  coordPlantaX Float?
+  /// Posicao vertical (%) na imagem de planta do cliente. Null = sem coordenada.
+  coordPlantaY Float?
 
   criadoEm     DateTime @default(now())
   atualizadoEm DateTime @updatedAt
@@ -931,6 +940,7 @@ model Colaborador {
   entregasEpi   EntregaEpi[]
   consequencias Consequencia[]
   acidentes     Acidente[]
+  afastamentos  Afastamento[]
 
   @@unique([clienteId, cpf])
   @@index([clienteId, situacao])
@@ -1418,6 +1428,8 @@ model Acidente {
   criadoEm     DateTime @default(now())
   atualizadoEm DateTime @updatedAt
 
+  afastamentos Afastamento[]
+
   @@index([clienteId, data])
   @@map("acidente")
 }
@@ -1497,4 +1509,60 @@ model InventarioRisco {
   @@index([clienteId, situacao])
   @@index([clienteId, iir])
   @@map("inventario_risco")
+}
+
+/**
+ * ==========================================================================
+ * Etapa 21 — Absenteismo
+ * ==========================================================================
+ */
+
+enum TipoAfastamento {
+  DOENCA_COMUM
+  DOENCA_OCUPACIONAL
+  ACIDENTE_TRABALHO
+  ACIDENTE_TRAJETO
+  MATERNIDADE
+  PATERNIDADE
+  LICENCA_TRATAMENTO
+  OUTRO
+}
+
+/// Periodo de afastamento de um colaborador.
+///
+/// A taxa de absenteismo (TA) e calculada sobre estes registros:
+/// TA = (total_dias_afastados / (n_colaboradores x dias_uteis_periodo)) x 100
+///
+/// O vinculo com Acidente e opcional: afastamentos por doenca comum nao
+/// precisam de CAT.
+model Afastamento {
+  id        String  @id @default(uuid())
+  clienteId String
+  cliente   Cliente @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+
+  colaboradorId String
+  colaborador   Colaborador @relation(fields: [colaboradorId], references: [id], onDelete: Cascade)
+
+  /// Acidente registrado que originou o afastamento, quando aplicavel.
+  acidenteId String?
+  acidente   Acidente? @relation(fields: [acidenteId], references: [id], onDelete: SetNull)
+
+  tipo            TipoAfastamento
+  dataInicio      DateTime        @db.Date
+  /// Nulo enquanto o retorno ainda nao foi registrado.
+  dataFim         DateTime?       @db.Date
+  /// Dias de afastamento. Calculado em diasFimInicio, mas persistido para
+  /// consultas rapidas e para nao mudar quando a data de fim e editada.
+  diasAfastamento Int             @default(0)
+
+  /// CID-10 quando disponivel (doenca e doenca ocupacional).
+  cid       String? @db.VarChar(10)
+  descricao String? @db.VarChar(500)
+
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  @@index([clienteId, dataInicio])
+  @@index([colaboradorId, dataInicio])
+  @@map("afastamento")
 }

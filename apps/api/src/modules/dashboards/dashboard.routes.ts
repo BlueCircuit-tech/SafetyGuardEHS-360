@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { painelExecutivo, painelGerencial, painelOperacional } from './dashboard.service.js';
+import { mapaDeCalorPorPlanta, benchmarkSupervisores } from './mapa.service.js';
 import { guardaPorMetodo } from '../../lib/guarda.js';
 
 const filtroSchema = z.object({
@@ -31,4 +32,26 @@ export async function registrarRotasDashboards(app: FastifyInstance): Promise<vo
   app.get('/dashboards/gerencial', async (request) => painelGerencial(filtroSchema.parse(request.query)));
 
   app.get('/dashboards/operacional', async (request) => painelOperacional(filtroSchema.parse(request.query)));
+
+  /**
+   * Mapa de calor por planta (§22): retorna as áreas com coordenadas e os
+   * indicadores de desvio para renderizar pontos coloridos sobre a imagem.
+   */
+  app.get('/dashboards/mapa-planta', async (request) => {
+    const { clienteId, meses } = z
+      .object({ clienteId: z.string().uuid(), meses: z.coerce.number().int().min(1).max(24).default(3) })
+      .parse(request.query);
+    return mapaDeCalorPorPlanta(clienteId, meses);
+  });
+
+  /**
+   * Benchmark supervisor×supervisor (§27): compara responsáveis de área
+   * por volume de desvios, conformidade e planos em aberto.
+   */
+  app.get('/dashboards/supervisores', async (request) => {
+    const { clienteId, meses } = z
+      .object({ clienteId: z.string().uuid().optional(), meses: z.coerce.number().int().min(1).max(24).default(3) })
+      .parse(request.query);
+    return benchmarkSupervisores(clienteId, meses);
+  });
 }

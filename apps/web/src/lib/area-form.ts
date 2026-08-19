@@ -35,6 +35,8 @@ export interface AreaApi {
   latitude: number | null;
   longitude: number | null;
   pontoReferencia: string | null;
+  coordPlantaX: number | null;
+  coordPlantaY: number | null;
   frequenciaInspecaoDias: number;
   situacao: SituacaoArea;
   observacoes: string | null;
@@ -84,6 +86,8 @@ export const VALORES_INICIAIS_AREA: AreaFormValues = {
   latitude: '',
   longitude: '',
   pontoReferencia: '',
+  coordPlantaX: '',
+  coordPlantaY: '',
   frequenciaInspecaoDias: String(FREQUENCIA_INSPECAO_PADRAO),
   situacao: 'ATIVA',
   observacoes: '',
@@ -111,6 +115,8 @@ export function areaParaFormulario(area: AreaApi): AreaFormValues {
     latitude: texto(area.latitude),
     longitude: texto(area.longitude),
     pontoReferencia: texto(area.pontoReferencia),
+    coordPlantaX: texto(area.coordPlantaX),
+    coordPlantaY: texto(area.coordPlantaY),
     frequenciaInspecaoDias: texto(area.frequenciaInspecaoDias),
     situacao: area.situacao,
     observacoes: texto(area.observacoes),

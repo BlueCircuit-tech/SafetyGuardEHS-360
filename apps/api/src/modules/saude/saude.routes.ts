@@ -51,8 +51,17 @@ import {
 } from './documento.service.js';
 import { filaDeRenovacao, painelConformidade } from './conformidade.service.js';
 import { montarPpp } from './ppp.service.js';
+import { prisma } from '../../db.js';
+import {
+  ROTULO_TIPO_AFASTAMENTO,
+  afastamentoCreateSchema,
+  afastamentoUpdateSchema,
+  calcularTaxaAbsenteismo,
+  diasUteisEntre,
+  type TipoAfastamento,
+} from '@safetyguard/shared';
 import { MIMES_DOCUMENTO_ACEITOS, removerArquivoPublico, salvarDocumento } from '../../lib/arquivos.js';
-import { RequisicaoInvalida } from '../../lib/erros.js';
+import { NaoEncontrado, RequisicaoInvalida } from '../../lib/erros.js';
 import { contextoDeAuditoria } from '../../lib/autenticacao.js';
 import { guardaPorMetodo } from '../../lib/guarda.js';
 import { uploadMaxBytes } from '../../env.js';
@@ -98,6 +107,8 @@ export async function registrarRotasSaude(app: FastifyInstance): Promise<void> {
         // O painel e leitura de indicador, e nao de cadastro.
         '/api/v1/conformidade': 'indicadores:ler',
         '/api/v1/conformidade/renovacoes': 'indicadores:ler',
+        '/api/v1/absenteismo': 'indicadores:ler',
+        '/api/v1/absenteismo/painel': 'indicadores:ler',
       },
     }),
   );
@@ -304,6 +315,131 @@ export async function registrarRotasSaude(app: FastifyInstance): Promise<void> {
   });
 
   /* ============================================================ conformidade */
+
+  /* ============================================================ absenteismo */
+
+  app.get('/absenteismo/painel', async (request) => {
+    const { clienteId, meses } = z
+      .object({ clienteId: z.string().uuid().optional(), meses: z.coerce.number().int().min(1).max(24).default(12) })
+      .parse(request.query);
+
+    const inicio = new Date();
+    inicio.setMonth(inicio.getMonth() - meses);
+    const agora = new Date();
+
+    const where = { ...(clienteId ? { clienteId } : {}), dataInicio: { gte: inicio } };
+
+    const [afastamentos, totalColaboradoresAtivos] = await Promise.all([
+      prisma.afastamento.findMany({
+        where,
+        orderBy: { dataInicio: 'desc' },
+        include: {
+          colaborador: { select: { id: true, nome: true, funcao: true, areaId: true } },
+          cliente: { select: { id: true, nomeFantasia: true } },
+        },
+      }),
+      prisma.colaborador.count({ where: { situacao: 'ATIVO', ...(clienteId ? { clienteId } : {}) } }),
+    ]);
+
+    const diasPeriodo = diasUteisEntre(inicio, agora);
+    const totalDias = afastamentos.reduce((acc, a) => acc + a.diasAfastamento, 0);
+    const taxaAbsenteismo = calcularTaxaAbsenteismo(totalDias, totalColaboradoresAtivos, diasPeriodo);
+
+    // Agrupa por tipo
+    const porTipo = Object.fromEntries(
+      (Object.keys(ROTULO_TIPO_AFASTAMENTO) as TipoAfastamento[]).map((tipo) => {
+        const itens = afastamentos.filter((a) => a.tipo === tipo);
+        return [tipo, { rotulo: ROTULO_TIPO_AFASTAMENTO[tipo], quantidade: itens.length, dias: itens.reduce((s, a) => s + a.diasAfastamento, 0) }];
+      }),
+    );
+
+    // Top 5 colaboradores com mais dias no período
+    const porColaborador = new Map<string, { nome: string; funcao: string; dias: number }>();
+    for (const a of afastamentos) {
+      const atual = porColaborador.get(a.colaboradorId) ?? { nome: a.colaborador.nome, funcao: a.colaborador.funcao, dias: 0 };
+      porColaborador.set(a.colaboradorId, { ...atual, dias: atual.dias + a.diasAfastamento });
+    }
+    const topColaboradores = [...porColaborador.values()].sort((a, b) => b.dias - a.dias).slice(0, 5);
+
+    return {
+      periodo: { inicio, fim: agora, meses, diasUteis: diasPeriodo },
+      totalAfastamentos: afastamentos.length,
+      totalDias,
+      taxaAbsenteismo,
+      colaboradoresAtivos: totalColaboradoresAtivos,
+      emAfastamento: afastamentos.filter((a) => !a.dataFim).length,
+      porTipo,
+      topColaboradores,
+    };
+  });
+
+  app.get('/absenteismo', async (request) => {
+    const { clienteId, colaboradorId, tipo, meses } = z
+      .object({
+        clienteId: z.string().uuid().optional(),
+        colaboradorId: z.string().uuid().optional(),
+        tipo: z.string().optional(),
+        meses: z.coerce.number().int().min(1).max(60).optional(),
+      })
+      .parse(request.query);
+
+    const inicio = meses ? (() => { const d = new Date(); d.setMonth(d.getMonth() - meses); return d; })() : undefined;
+
+    const itens = await prisma.afastamento.findMany({
+      where: {
+        ...(clienteId ? { clienteId } : {}),
+        ...(colaboradorId ? { colaboradorId } : {}),
+        ...(tipo ? { tipo: tipo as TipoAfastamento } : {}),
+        ...(inicio ? { dataInicio: { gte: inicio } } : {}),
+      },
+      orderBy: { dataInicio: 'desc' },
+      take: 300,
+      include: {
+        colaborador: { select: { id: true, nome: true, funcao: true } },
+        cliente: { select: { id: true, nomeFantasia: true } },
+        acidente: { select: { id: true, tipo: true, data: true } },
+      },
+    });
+
+    return itens.map((a) => ({ ...a, rotulos: { tipo: ROTULO_TIPO_AFASTAMENTO[a.tipo as TipoAfastamento] } }));
+  });
+
+  app.get('/absenteismo/:id', async (request) => {
+    const { id } = paramsSchema.parse(request.params);
+    const a = await prisma.afastamento.findUnique({
+      where: { id },
+      include: {
+        colaborador: { select: { id: true, nome: true, funcao: true } },
+        cliente: { select: { id: true, nomeFantasia: true } },
+        acidente: { select: { id: true, tipo: true, data: true } },
+      },
+    });
+    if (!a) throw new NaoEncontrado('Afastamento nao encontrado.', 'AFASTAMENTO_NAO_ENCONTRADO');
+    return { ...a, rotulos: { tipo: ROTULO_TIPO_AFASTAMENTO[a.tipo as TipoAfastamento] } };
+  });
+
+  app.post('/absenteismo', async (request, reply) => {
+    const dados = afastamentoCreateSchema.parse(request.body);
+    const novo = await prisma.afastamento.create({ data: dados as unknown as Parameters<typeof prisma.afastamento.create>[0]['data'] });
+    return reply.status(201).send({ ...novo, rotulos: { tipo: ROTULO_TIPO_AFASTAMENTO[novo.tipo as TipoAfastamento] } });
+  });
+
+  app.put('/absenteismo/:id', async (request) => {
+    const { id } = paramsSchema.parse(request.params);
+    const dados = afastamentoUpdateSchema.parse(request.body);
+    const atual = await prisma.afastamento.findUnique({ where: { id } });
+    if (!atual) throw new NaoEncontrado('Afastamento nao encontrado.', 'AFASTAMENTO_NAO_ENCONTRADO');
+    const atualizado = await prisma.afastamento.update({ where: { id }, data: dados as unknown as Parameters<typeof prisma.afastamento.update>[0]['data'] });
+    return { ...atualizado, rotulos: { tipo: ROTULO_TIPO_AFASTAMENTO[atualizado.tipo as TipoAfastamento] } };
+  });
+
+  app.delete('/absenteismo/:id', async (request, reply) => {
+    const { id } = paramsSchema.parse(request.params);
+    const atual = await prisma.afastamento.findUnique({ where: { id }, select: { id: true } });
+    if (!atual) throw new NaoEncontrado('Afastamento nao encontrado.', 'AFASTAMENTO_NAO_ENCONTRADO');
+    await prisma.afastamento.delete({ where: { id } });
+    return reply.status(204).send();
+  });
 
   app.get('/conformidade', async (request) => {
     const filtro = conformidadeFiltroSchema.parse(request.query);

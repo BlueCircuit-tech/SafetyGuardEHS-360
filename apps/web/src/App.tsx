@@ -41,6 +41,10 @@ import { RiscosPage } from './paginas/RiscosPage';
 import { DashboardExecutivoPage } from './paginas/DashboardExecutivoPage';
 import { DashboardGerencialPage } from './paginas/DashboardGerencialPage';
 import { DashboardOperacionalPage } from './paginas/DashboardOperacionalPage';
+import { AbsenteismoPage } from './paginas/AbsenteismoPage';
+import { AfastamentoFormPage } from './paginas/AfastamentoFormPage';
+import { MapaPlantaPage } from './paginas/MapaPlantaPage';
+import { BenchmarkSupervisoresPage } from './paginas/BenchmarkSupervisoresPage';
 
 /**
  * Exige sessão válida — e, opcionalmente, uma permissão.
@@ -176,6 +180,13 @@ export function App() {
               {rota('dashboard-operacional', 'planos:ler', <DashboardOperacionalPage />)}
 
               {rota('dashboard-bbs', 'indicadores:ler', <DashboardBbsPage />)}
+              {rota('mapa-planta', 'indicadores:ler', <MapaPlantaPage />)}
+              {rota('benchmark-supervisores', 'indicadores:ler', <BenchmarkSupervisoresPage />)}
+
+              {rota('absenteismo', 'saude:ler', <AbsenteismoPage />)}
+              {rota('absenteismo/novo', 'saude:escrever', <AfastamentoFormPage />)}
+              {rota('absenteismo/:id', 'saude:ler', <AfastamentoFormPage />)}
+
               {rota('comunicacao', 'planos:ler', <ComunicacaoPage />)}
               {rota('usuarios', 'usuarios:gerenciar', <UsuariosPage />)}
 

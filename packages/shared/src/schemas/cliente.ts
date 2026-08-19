@@ -167,6 +167,8 @@ const clienteBaseSchema = z.object({
 
   /* --- Identidade e anotacoes -------------------------------------------- */
   logoUrl: opcional(z.string().trim().max(300)),
+  /** URL da imagem de planta baixa — usada no mapa de calor por coordenada. */
+  imagemPlantaUrl: opcional(z.string().trim().url('URL da planta deve ser valida.').max(300)),
   /** Cor da serie do cliente nos graficos comparativos. */
   corDestaque: z
     .string()
