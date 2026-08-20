@@ -11,6 +11,8 @@ import {
 } from '@safetyguard/shared';
 import { prisma } from '../../db.js';
 import { obterEmpresaOuFalhar } from '../empresa/empresa.service.js';
+import { enviarEmail } from '../../lib/email.js';
+import { env } from '../../env.js';
 
 type ClientePrisma = PrismaClient | Prisma.TransactionClient;
 
@@ -123,22 +125,89 @@ export async function registrarNotificacoes(
   const canais = canaisDoDisparo(contexto.regra, agora) as CanalNotificacao[];
 
   for (const canal of canais) {
-    await db.notificacao.create({
+    const corpo =
+      canal === 'EMAIL'
+        ? mensagens.emailCorpo
+        : canal === 'WHATSAPP'
+          ? mensagens.whatsapp
+          : `[LIGACAO DE VOZ] Risco I fora do horario comercial. ${mensagens.emailAssunto}`;
+
+    const notificacao = await db.notificacao.create({
       data: {
         ...base,
         canal,
         assunto: canal === 'EMAIL' ? mensagens.emailAssunto : null,
-        corpo:
-          canal === 'EMAIL'
-            ? mensagens.emailCorpo
-            : canal === 'WHATSAPP'
-              ? mensagens.whatsapp
-              : `[LIGACAO DE VOZ] Risco I fora do horario comercial. ${mensagens.emailAssunto}`,
+        corpo,
       },
     });
+
+    if (canal === 'EMAIL' && mensagens.emailAssunto && mensagens.emailCorpo) {
+      const destinatariosEmail = resolverDestinatariosEmail(
+        contexto.regra.destinatarios,
+        contexto,
+      );
+      if (destinatariosEmail.length > 0) {
+        try {
+          const enviado = await enviarEmail({
+            para: destinatariosEmail,
+            assunto: mensagens.emailAssunto,
+            corpo: mensagens.emailCorpo,
+          });
+          if (enviado) {
+            await prisma.notificacao.update({
+              where: { id: notificacao.id },
+              data: { status: 'ENVIADA' },
+            });
+          }
+        } catch {
+          await prisma.notificacao.update({
+            where: { id: notificacao.id },
+            data: { status: 'FALHOU' },
+          });
+        }
+      }
+    }
   }
 
   return { canais, agrupada };
+}
+
+/* -------------------------------------------------------------------------- */
+/* Resolução de destinatários de e-mail                                       */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Monta a lista de e-mails reais para o canal EMAIL.
+ *
+ * Estratégia (em ordem):
+ * 1. E-mail do responsável pelo plano de ação (se houver)
+ * 2. E-mail de cópia de monitoramento configurado em ALERTA_EMAIL_COPIA
+ *
+ * Os `destinatarios` da regra são nomes de papel (GESTOR_SST, DIRETOR…), não
+ * e-mails. O mapeamento de papel→e-mail exigiria uma agenda de contatos que
+ * ainda não existe. Por ora, o responsável do plano e o e-mail de cópia
+ * garantem que o alerta chegue.
+ */
+function resolverDestinatariosEmail(
+  _papeis: string[],
+  contexto: ContextoNotificacao,
+): string[] {
+  const enderecos = new Set<string>();
+
+  // Responsável registrado no plano de ação ou na observação
+  if (contexto.regra && 'responsavelEmail' in contexto) {
+    const re = (contexto as { responsavelEmail?: string }).responsavelEmail;
+    if (re) enderecos.add(re);
+  }
+
+  // Cópia de monitoramento (ex.: gestor da consultoria)
+  if (env.ALERTA_EMAIL_COPIA) {
+    for (const email of env.ALERTA_EMAIL_COPIA.split(',').map((e) => e.trim())) {
+      if (email) enderecos.add(email);
+    }
+  }
+
+  return [...enderecos];
 }
 
 /* -------------------------------------------------------------------------- */

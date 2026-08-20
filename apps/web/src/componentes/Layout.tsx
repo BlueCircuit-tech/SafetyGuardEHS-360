@@ -56,6 +56,7 @@ const GRUPOS: GrupoNav[] = [
       { titulo: 'Dashboard BBS', descricao: 'Comportamento × condição', rota: '/dashboard-bbs', icone: 'painel', permissao: 'indicadores:ler' },
       { titulo: 'Mapa de calor', descricao: 'Áreas por coordenada de planta', rota: '/mapa-planta', icone: 'local', permissao: 'indicadores:ler' },
       { titulo: 'Benchmark', descricao: 'Desempenho por supervisor', rota: '/benchmark-supervisores', icone: 'pessoas', permissao: 'indicadores:ler' },
+      { titulo: 'Financeiro', descricao: 'Custo evitado, ROI e parâmetros', rota: '/indicadores-financeiros', icone: 'alvo', permissao: 'indicadores:ler' },
       { titulo: 'Intelligence', descricao: 'Leituras automáticas dos dados', rota: '/inteligencia', icone: 'raio', permissao: 'indicadores:ler' },
       { titulo: 'Comunicação', descricao: 'Alertas e escalonamento automático', rota: '/comunicacao', icone: 'envelope', permissao: 'planos:ler' },
     ],
@@ -103,6 +104,7 @@ const TITULOS_ROTA: Array<{ prefixo: string; secao: string; titulo: string }> = 
   { prefixo: '/benchmark-supervisores', secao: 'Indicadores', titulo: 'Benchmark de Supervisores' },
   { prefixo: '/inteligencia', secao: 'Indicadores', titulo: 'SafetyGuard Intelligence' },
   { prefixo: '/comunicacao', secao: 'Indicadores', titulo: 'Comunicação Automática' },
+  { prefixo: '/indicadores-financeiros', secao: 'Indicadores', titulo: 'Indicadores Financeiros' },
 ];
 
 export function Layout() {

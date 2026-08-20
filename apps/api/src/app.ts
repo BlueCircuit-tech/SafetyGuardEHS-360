@@ -27,6 +27,7 @@ import { registrarRotasAcidentes as rotasAcidentes } from './modules/acidentes/a
 import { registrarRotasRiscos as rotasRiscos } from './modules/riscos/risco.routes.js';
 import { rotasUsuarios } from './modules/usuarios/usuario.routes.js';
 import { rotasReferencias } from './modules/referencias/referencias.routes.js';
+import { registrarRotasFinanceiro as rotasFinanceiro } from './modules/financeiro/financeiro.routes.js';
 import { prisma } from './db.js';
 
 export const PREFIXO_API = '/api/v1';
@@ -81,6 +82,7 @@ export async function criarApp(): Promise<FastifyInstance> {
       await api.register(rotasInteligencia);
       await api.register(rotasAcidentes);
       await api.register(rotasRiscos);
+      await api.register(rotasFinanceiro);
       await api.register(async (referencias) => {
         referencias.addHook('preHandler', app.autenticar);
         await referencias.register(rotasReferencias);

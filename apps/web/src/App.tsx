@@ -45,6 +45,7 @@ import { AbsenteismoPage } from './paginas/AbsenteismoPage';
 import { AfastamentoFormPage } from './paginas/AfastamentoFormPage';
 import { MapaPlantaPage } from './paginas/MapaPlantaPage';
 import { BenchmarkSupervisoresPage } from './paginas/BenchmarkSupervisoresPage';
+import { IndicadoresFinanceirosPage } from './paginas/IndicadoresFinanceirosPage';
 
 /**
  * Exige sessão válida — e, opcionalmente, uma permissão.
@@ -182,6 +183,7 @@ export function App() {
               {rota('dashboard-bbs', 'indicadores:ler', <DashboardBbsPage />)}
               {rota('mapa-planta', 'indicadores:ler', <MapaPlantaPage />)}
               {rota('benchmark-supervisores', 'indicadores:ler', <BenchmarkSupervisoresPage />)}
+              {rota('indicadores-financeiros', 'indicadores:ler', <IndicadoresFinanceirosPage />)}
 
               {rota('absenteismo', 'saude:ler', <AbsenteismoPage />)}
               {rota('absenteismo/novo', 'saude:escrever', <AfastamentoFormPage />)}

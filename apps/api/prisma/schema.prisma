@@ -356,6 +356,7 @@ model Cliente {
   notificacoes          Notificacao[]
   usuarios              Usuario[]
   afastamentos          Afastamento[]
+  parametrosFinanceiros ParametrosFinanceiros?
 
   @@unique([empresaId, cnpj])
   @@unique([empresaId, numeroContrato])
@@ -1526,6 +1527,38 @@ enum TipoAfastamento {
   PATERNIDADE
   LICENCA_TRATAMENTO
   OUTRO
+}
+
+/// Parametros de custo configuráveis por cliente para o cálculo de
+/// indicadores financeiros (custo evitado, ROI).
+///
+/// Se clienteId for nulo, é o padrão global da consultoria.
+/// Cada cliente pode ter seu próprio conjunto de parâmetros.
+model ParametrosFinanceiros {
+  id        String  @id @default(uuid())
+  clienteId String? @unique
+  cliente   Cliente? @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+
+  /// Custo médio por acidente COM afastamento (CAT, indenização, hora parada).
+  custoAcidenteComAfastamento Float @default(50000)
+  /// Custo médio por acidente SEM afastamento (médico, primeiros socorros, hora parada).
+  custoAcidenteSemAfastamento Float @default(5000)
+  /// Custo médio por dia de afastamento (benefícios INSS, produtividade perdida).
+  custoDiaAfastamento         Float @default(300)
+  /// Custo por hora de parada de produção (equipamento + mão de obra parada).
+  custoHoraParadaProducao     Float @default(2000)
+  /// Valor médio de multa NR (base: NR-28 tabela de infrações).
+  custoMultaNrMedia           Float @default(20000)
+  /// Fator de redução de acidentes atribuído ao programa BBS (0.0–1.0).
+  /// Padrão 0,3 = 30% de prevenção com BBS ativo.
+  fatorPreventivoBbs          Float @default(0.3)
+  /// Valor mensal do contrato da consultoria, para calcular ROI (opcional).
+  valorContratoMensal         Float?
+
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  @@map("parametros_financeiros")
 }
 
 /// Periodo de afastamento de um colaborador.

@@ -23,6 +23,14 @@ const envSchema = z.object({
    */
   JWT_SECRET: z.string().min(16, 'JWT_SECRET deve ter ao menos 16 caracteres.').default('desenvolvimento-safetyguard-trocar'),
   JWT_EXPIRA_EM: z.string().default('12h'),
+
+  SMTP_HOST: z.string().optional(),
+  SMTP_PORT: z.coerce.number().int().positive().default(587),
+  SMTP_USER: z.string().optional(),
+  SMTP_PASS: z.string().optional(),
+  SMTP_FROM: z.string().optional(),
+  /** E-mail adicional que recebe cópia de todos os alertas (monitoramento). */
+  ALERTA_EMAIL_COPIA: z.string().optional(),
 });
 
 const resultado = envSchema.safeParse(process.env);
