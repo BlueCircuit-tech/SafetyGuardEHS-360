@@ -1,6 +1,11 @@
 /** Cliente HTTP da API do SafetyGuard EHS 360. */
 
-export const API_URL = (import.meta.env.VITE_API_URL ?? 'http://localhost:3333').replace(/\/$/, '');
+const fallbackApiUrl =
+  typeof window !== 'undefined' && !window.location.hostname.startsWith('localhost') && !window.location.hostname.startsWith('127.0.0.1')
+    ? ''
+    : 'http://localhost:3333';
+
+export const API_URL = (import.meta.env.VITE_API_URL ?? fallbackApiUrl).replace(/\/$/, '');
 const BASE = `${API_URL}/api/v1`;
 
 /* -------------------------------------------------------------------------- */
