@@ -31,6 +31,10 @@ const envSchema = z.object({
   SMTP_FROM: z.string().optional(),
   /** E-mail adicional que recebe cópia de todos os alertas (monitoramento). */
   ALERTA_EMAIL_COPIA: z.string().optional(),
+
+  // Supabase — Storage e autenticação server-side
+  SUPABASE_URL: z.string().url().optional(),
+  SUPABASE_SERVICE_ROLE_KEY: z.string().optional(),
 });
 
 const resultado = envSchema.safeParse(process.env);
