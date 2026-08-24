@@ -1,3 +1,4 @@
+import type { IncomingMessage, ServerResponse } from 'node:http';
 import Fastify, { type FastifyInstance } from 'fastify';
 import cors from '@fastify/cors';
 import multipart from '@fastify/multipart';
@@ -92,4 +93,10 @@ export async function criarApp(): Promise<FastifyInstance> {
   );
 
   return app;
+}
+
+export default async function appHandler(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  const app = await criarApp();
+  await app.ready();
+  app.server.emit('request', req, res);
 }
