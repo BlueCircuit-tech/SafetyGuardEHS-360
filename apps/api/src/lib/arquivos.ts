@@ -51,7 +51,15 @@ async function uploadParaSupabase(
 }
 
 export async function garantirDiretorioDeUpload(): Promise<void> {
-  await mkdir(uploadDir, { recursive: true });
+  try {
+    await mkdir(uploadDir, { recursive: true });
+  } catch {
+    if (process.env.VERCEL) {
+      await mkdir('/tmp/uploads', { recursive: true });
+      return;
+    }
+    throw new Error(`Nao foi possivel criar o diretorio de upload em ${uploadDir}`);
+  }
 }
 
 /**

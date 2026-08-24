@@ -53,6 +53,8 @@ export const corsOrigins = env.CORS_ORIGIN.split(',')
   .map((origem) => origem.trim())
   .filter(Boolean);
 
-export const uploadDir = resolve(process.cwd(), env.UPLOAD_DIR);
+const defaultUploadDir = process.env.VERCEL ? '/tmp/uploads' : resolve(process.cwd(), env.UPLOAD_DIR);
+
+export const uploadDir = defaultUploadDir;
 export const uploadMaxBytes = Math.round(env.UPLOAD_MAX_MB * 1024 * 1024);
 export const isProducao = env.NODE_ENV === 'production';
