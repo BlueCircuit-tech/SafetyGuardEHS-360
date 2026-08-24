@@ -6,8 +6,10 @@ import { z } from 'zod';
 config();
 config({ path: resolve(process.cwd(), '../../.env') });
 
+const defaultNodeEnv = process.env.VERCEL ? 'production' : 'development';
+
 const envSchema = z.object({
-  NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
+  NODE_ENV: z.enum(['development', 'test', 'production']).default(defaultNodeEnv),
   DATABASE_URL: z.string().min(1, 'DATABASE_URL nao configurada — copie o .env.example para .env.'),
   API_PORT: z.coerce.number().int().positive().default(3333),
   API_HOST: z.string().default('0.0.0.0'),

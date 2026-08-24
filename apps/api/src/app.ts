@@ -34,10 +34,12 @@ import { prisma } from './db.js';
 export const PREFIXO_API = '/api/v1';
 
 export async function criarApp(): Promise<FastifyInstance> {
+  const loggerConfig = isProducao || Boolean(process.env.VERCEL)
+    ? { level: 'info' }
+    : { level: 'info', transport: { target: 'pino-pretty', options: { translateTime: 'HH:MM:ss', ignore: 'pid,hostname' } } };
+
   const app = Fastify({
-    logger: isProducao
-      ? { level: 'info' }
-      : { level: 'info', transport: { target: 'pino-pretty', options: { translateTime: 'HH:MM:ss', ignore: 'pid,hostname' } } },
+    logger: loggerConfig,
     bodyLimit: uploadMaxBytes + 1024 * 1024,
   });
 
