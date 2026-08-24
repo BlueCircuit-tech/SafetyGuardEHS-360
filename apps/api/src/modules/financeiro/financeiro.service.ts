@@ -1,7 +1,8 @@
 import { prisma } from '../../db.js';
 import { obterEmpresaOuFalhar } from '../empresa/empresa.service.js';
 
-const PADRAO: Omit<ParametrosFinanceiros, 'clienteId'> = {
+const PADRAO: ParametrosFinanceiros = {
+  clienteId: null,
   custoAcidenteComAfastamento: 50000,
   custoAcidenteSemAfastamento: 5000,
   custoDiaAfastamento: 300,
@@ -22,6 +23,10 @@ interface ParametrosFinanceiros {
   valorContratoMensal: number | null;
 }
 
+type ParametrosFinanceirosInput = Partial<ParametrosFinanceiros> & {
+  clienteId?: string | null;
+};
+
 /** Retorna os parâmetros de custo do cliente. Se não cadastrado, usa o padrão global ou os defaults. */
 export async function obterParametros(clienteId?: string): Promise<ParametrosFinanceiros> {
   if (clienteId) {
@@ -36,33 +41,56 @@ export async function obterParametros(clienteId?: string): Promise<ParametrosFin
 }
 
 /** Cria ou atualiza os parâmetros de custo de um cliente (ou o padrão global). */
+function normalizarParametros(dados: ParametrosFinanceirosInput): ParametrosFinanceiros {
+  return {
+    clienteId: dados.clienteId ?? null,
+    custoAcidenteComAfastamento: dados.custoAcidenteComAfastamento ?? PADRAO.custoAcidenteComAfastamento,
+    custoAcidenteSemAfastamento: dados.custoAcidenteSemAfastamento ?? PADRAO.custoAcidenteSemAfastamento,
+    custoDiaAfastamento: dados.custoDiaAfastamento ?? PADRAO.custoDiaAfastamento,
+    custoHoraParadaProducao: dados.custoHoraParadaProducao ?? PADRAO.custoHoraParadaProducao,
+    custoMultaNrMedia: dados.custoMultaNrMedia ?? PADRAO.custoMultaNrMedia,
+    fatorPreventivoBbs: dados.fatorPreventivoBbs ?? PADRAO.fatorPreventivoBbs,
+    valorContratoMensal: dados.valorContratoMensal ?? PADRAO.valorContratoMensal,
+  };
+}
+
 export async function salvarParametros(
-  dados: ParametrosFinanceiros,
+  dados: ParametrosFinanceirosInput,
 ): Promise<ParametrosFinanceiros> {
-  const chave = dados.clienteId ?? null;
+  const normalizados = normalizarParametros(dados);
+  const chave = normalizados.clienteId ?? null;
   const record = await prisma.parametrosFinanceiros.upsert({
     where: { clienteId: chave ?? undefined },
     create: {
       clienteId: chave,
-      custoAcidenteComAfastamento: dados.custoAcidenteComAfastamento,
-      custoAcidenteSemAfastamento: dados.custoAcidenteSemAfastamento,
-      custoDiaAfastamento: dados.custoDiaAfastamento,
-      custoHoraParadaProducao: dados.custoHoraParadaProducao,
-      custoMultaNrMedia: dados.custoMultaNrMedia,
-      fatorPreventivoBbs: dados.fatorPreventivoBbs,
-      valorContratoMensal: dados.valorContratoMensal ?? null,
+      custoAcidenteComAfastamento: normalizados.custoAcidenteComAfastamento,
+      custoAcidenteSemAfastamento: normalizados.custoAcidenteSemAfastamento,
+      custoDiaAfastamento: normalizados.custoDiaAfastamento,
+      custoHoraParadaProducao: normalizados.custoHoraParadaProducao,
+      custoMultaNrMedia: normalizados.custoMultaNrMedia,
+      fatorPreventivoBbs: normalizados.fatorPreventivoBbs,
+      valorContratoMensal: normalizados.valorContratoMensal ?? null,
     },
     update: {
-      custoAcidenteComAfastamento: dados.custoAcidenteComAfastamento,
-      custoAcidenteSemAfastamento: dados.custoAcidenteSemAfastamento,
-      custoDiaAfastamento: dados.custoDiaAfastamento,
-      custoHoraParadaProducao: dados.custoHoraParadaProducao,
-      custoMultaNrMedia: dados.custoMultaNrMedia,
-      fatorPreventivoBbs: dados.fatorPreventivoBbs,
-      valorContratoMensal: dados.valorContratoMensal ?? null,
+      custoAcidenteComAfastamento: normalizados.custoAcidenteComAfastamento,
+      custoAcidenteSemAfastamento: normalizados.custoAcidenteSemAfastamento,
+      custoDiaAfastamento: normalizados.custoDiaAfastamento,
+      custoHoraParadaProducao: normalizados.custoHoraParadaProducao,
+      custoMultaNrMedia: normalizados.custoMultaNrMedia,
+      fatorPreventivoBbs: normalizados.fatorPreventivoBbs,
+      valorContratoMensal: normalizados.valorContratoMensal ?? null,
     },
   });
-  return { ...record, fatorPreventivoBbs: Number(record.fatorPreventivoBbs) };
+  return {
+    clienteId: record.clienteId ?? null,
+    custoAcidenteComAfastamento: Number(record.custoAcidenteComAfastamento),
+    custoAcidenteSemAfastamento: Number(record.custoAcidenteSemAfastamento),
+    custoDiaAfastamento: Number(record.custoDiaAfastamento),
+    custoHoraParadaProducao: Number(record.custoHoraParadaProducao),
+    custoMultaNrMedia: Number(record.custoMultaNrMedia),
+    fatorPreventivoBbs: Number(record.fatorPreventivoBbs),
+    valorContratoMensal: record.valorContratoMensal ? Number(record.valorContratoMensal) : null,
+  };
 }
 
 /** Calcula os indicadores financeiros do período. */
