@@ -53,6 +53,14 @@ export async function criarApp(): Promise<FastifyInstance> {
   registrarEscopoNaResposta(app);
   registrarTratadorDeErros(app);
 
+  app.get('/', async () => ({
+    status: 'ok',
+    app: APP_NOME,
+    ambiente: env.NODE_ENV,
+    api: `${PREFIXO_API}`,
+    health: `${PREFIXO_API}/health`,
+  }));
+
   app.get('/health', async () => {
     let banco = 'ok';
     try {
