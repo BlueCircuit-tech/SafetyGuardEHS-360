@@ -1,13 +1,14 @@
 import { prisma } from '../../db.js';
 import { obterEmpresaOuFalhar } from '../empresa/empresa.service.js';
 
-const PADRAO: Omit<ParametrosFinanceiros, 'clienteId' | 'valorContratoMensal'> = {
+const PADRAO: Omit<ParametrosFinanceiros, 'clienteId'> = {
   custoAcidenteComAfastamento: 50000,
   custoAcidenteSemAfastamento: 5000,
   custoDiaAfastamento: 300,
   custoHoraParadaProducao: 2000,
   custoMultaNrMedia: 20000,
   fatorPreventivoBbs: 0.3,
+  valorContratoMensal: null,
 };
 
 interface ParametrosFinanceiros {
@@ -18,7 +19,7 @@ interface ParametrosFinanceiros {
   custoHoraParadaProducao: number;
   custoMultaNrMedia: number;
   fatorPreventivoBbs: number;
-  valorContratoMensal?: number | null;
+  valorContratoMensal: number | null;
 }
 
 /** Retorna os parâmetros de custo do cliente. Se não cadastrado, usa o padrão global ou os defaults. */

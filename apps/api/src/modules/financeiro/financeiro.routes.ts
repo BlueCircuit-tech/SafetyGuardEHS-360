@@ -5,13 +5,13 @@ import { calcularIndicadores, obterParametros, salvarParametros } from './financ
 
 const parametrosSchema = z.object({
   clienteId: z.string().uuid().optional().nullable(),
-  custoAcidenteComAfastamento: z.number().positive(),
-  custoAcidenteSemAfastamento: z.number().positive(),
-  custoDiaAfastamento: z.number().positive(),
-  custoHoraParadaProducao: z.number().positive(),
-  custoMultaNrMedia: z.number().positive(),
-  fatorPreventivoBbs: z.number().min(0).max(1),
-  valorContratoMensal: z.number().positive().optional().nullable(),
+  custoAcidenteComAfastamento: z.number().positive().default(50000),
+  custoAcidenteSemAfastamento: z.number().positive().default(5000),
+  custoDiaAfastamento: z.number().positive().default(300),
+  custoHoraParadaProducao: z.number().positive().default(2000),
+  custoMultaNrMedia: z.number().positive().default(20000),
+  fatorPreventivoBbs: z.number().min(0).max(1).default(0.3),
+  valorContratoMensal: z.number().positive().nullable().optional().default(null),
 });
 
 export async function registrarRotasFinanceiro(app: FastifyInstance): Promise<void> {
