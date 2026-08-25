@@ -15,11 +15,17 @@ async function main(): Promise<void> {
   process.on('SIGINT', () => void encerrar('SIGINT'));
   process.on('SIGTERM', () => void encerrar('SIGTERM'));
 
-  await app.listen({ port: env.API_PORT, host: env.API_HOST });
-  app.log.info(`SafetyGuard EHS 360 API em http://localhost:${env.API_PORT}/api/v1`);
+  // Não fazer listen se estiver rodando como serverless (Vercel)
+  if (!process.env.VERCEL) {
+    await app.listen({ port: env.API_PORT, host: env.API_HOST });
+    app.log.info(`SafetyGuard EHS 360 API em http://localhost:${env.API_PORT}/api/v1`);
+  }
 }
 
-main().catch((erro) => {
-  console.error('Falha ao iniciar a API:', erro);
-  process.exit(1);
-});
+// Executar main apenas em ambiente local
+if (!process.env.VERCEL) {
+  main().catch((erro) => {
+    console.error('Falha ao iniciar a API:', erro);
+    process.exit(1);
+  });
+}
