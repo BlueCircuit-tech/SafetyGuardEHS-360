@@ -46,8 +46,15 @@ export async function criarApp(): Promise<FastifyInstance> {
   await app.register(cors, { origin: corsOrigins, credentials: true });
   await app.register(multipart, { limits: { fileSize: uploadMaxBytes, files: 1 } });
 
-  await garantirDiretorioDeUpload();
-  await app.register(estaticos, { root: uploadDir, prefix: `${PREFIXO_PUBLICO}/`, decorateReply: false });
+  /*
+   * Na Vercel o filesystem e read-only e efemero: nao ha diretorio de uploads
+   * para servir, e os arquivos vao para o Supabase Storage (URLs absolutas).
+   * Fora dela, o diretorio local continua sendo servido em /arquivos.
+   */
+  if (!process.env.VERCEL) {
+    await garantirDiretorioDeUpload();
+    await app.register(estaticos, { root: uploadDir, prefix: `${PREFIXO_PUBLICO}/`, decorateReply: false });
+  }
 
   await registrarAutenticacao(app);
   registrarEscopoNaResposta(app);
