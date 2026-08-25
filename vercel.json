@@ -1,17 +1,15 @@
 {
+  "framework": null,
   "buildCommand": "npm run build",
   "installCommand": "npm install",
   "outputDirectory": "apps/web/dist",
   "functions": {
-    "api/index.js": {
+    "api/**": {
       "memory": 1024,
-      "maxDuration": 60,
-      "includeFiles": "node_modules/.prisma/client/**"
+      "maxDuration": 60
     }
   },
   "rewrites": [
-    { "source": "/api/(.*)", "destination": "/api" },
-    { "source": "/health", "destination": "/api" },
     { "source": "/(.*)", "destination": "/index.html" }
   ],
   "headers": [
