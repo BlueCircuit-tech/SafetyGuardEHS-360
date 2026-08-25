@@ -1,11 +1,29 @@
 /** Cliente HTTP da API do SafetyGuard EHS 360. */
 
-const fallbackApiUrl =
-  typeof window !== 'undefined' && !window.location.hostname.startsWith('localhost') && !window.location.hostname.startsWith('127.0.0.1')
-    ? ''
-    : 'http://localhost:3333';
+const emLocalhost =
+  typeof window !== 'undefined' &&
+  (window.location.hostname.startsWith('localhost') || window.location.hostname.startsWith('127.0.0.1'));
 
-export const API_URL = (import.meta.env.VITE_API_URL ?? fallbackApiUrl).replace(/\/$/, '');
+/*
+ * Em producao o front e a API vivem no mesmo dominio, entao base vazia
+ * (same-origin) e o valor correto.
+ *
+ * VITE_API_URL so e respeitada quando faz sentido: uma URL de localhost gravada
+ * no ambiente de producao — copiada do .env de desenvolvimento, por exemplo — e
+ * ignorada, senao o site publicado tentaria falar com a maquina de quem acessa.
+ */
+function resolverApiUrl(): string {
+  const configurada = import.meta.env.VITE_API_URL?.trim();
+
+  if (configurada) {
+    const apontaParaLocalhost = /^https?:\/\/(localhost|127\.0\.0\.1)(:|\/|$)/i.test(configurada);
+    if (!apontaParaLocalhost || emLocalhost) return configurada;
+  }
+
+  return emLocalhost ? 'http://localhost:3333' : '';
+}
+
+export const API_URL = resolverApiUrl().replace(/\/$/, '');
 const BASE = `${API_URL}/api/v1`;
 
 /* -------------------------------------------------------------------------- */
