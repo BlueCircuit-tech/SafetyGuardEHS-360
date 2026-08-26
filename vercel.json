@@ -4,12 +4,13 @@
   "installCommand": "npm install",
   "outputDirectory": "apps/web/dist",
   "functions": {
-    "api/**": {
+    "api/index.js": {
       "memory": 1024,
       "maxDuration": 60
     }
   },
   "rewrites": [
+    { "source": "/api/v1/(.*)", "destination": "/api" },
     { "source": "/(.*)", "destination": "/index.html" }
   ],
   "headers": [

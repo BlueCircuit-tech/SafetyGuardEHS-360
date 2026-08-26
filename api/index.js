@@ -1,13 +1,8 @@
 // Handler serverless da Vercel — encapsula a app Fastify compilada.
 //
-// O nome `[...path].js` e a rota catch-all das Vercel Functions: tudo sob
-// /api (inclusive /api/v1/...) chega a esta funcao com a URL original
-// preservada em req.url. Isso importa porque as rotas do Fastify vivem em
-// /api/v1/* — um rewrite comum reescreveria o caminho e o Fastify devolveria
-// 404 para todas elas.
-//
-// Nao usar `[[...path]]` aqui: a forma com colchetes duplos e do Next.js e a
-// Vercel a trata como nome literal, deixando a funcao inalcancavel.
+// O rewrite de /api/(.*) no vercel.json aponta para esta funcao. A Vercel
+// preserva a URL original em req.url ao aplicar o rewrite, entao o Fastify
+// continua enxergando /api/v1/... e casa suas rotas normalmente.
 //
 // A instancia do Fastify e reaproveitada entre invocacoes na mesma instancia
 // quente do lambda, evitando recriar o pool do Prisma a cada requisicao.
