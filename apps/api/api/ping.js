@@ -1,16 +1,17 @@
 // Endpoint de diagnostico do deploy. Nao importa nada do projeto de proposito:
 // se /api/ping responder JSON, as funcoes serverless estao sendo criadas e
 // roteadas, e qualquer falha restante esta na app Fastify ou nas variaveis de
-// ambiente. Se devolver o HTML do SPA, o problema e a configuracao do projeto
-// na Vercel — a pasta api/ nao esta virando funcao.
+// ambiente. Se devolver outra coisa, o problema e a configuracao do projeto na
+// Vercel — a pasta api/ nao esta virando funcao.
 //
 // Reporta apenas a presenca das variaveis, nunca os valores.
 
 const OBRIGATORIAS = [
   'DATABASE_URL',
+  'JWT_SECRET',
+  'CORS_ORIGIN',
   'SUPABASE_URL',
   'SUPABASE_SERVICE_ROLE_KEY',
-  'JWT_SECRET',
 ];
 
 export default function handler(req, res) {

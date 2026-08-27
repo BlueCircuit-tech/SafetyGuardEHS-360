@@ -53,6 +53,25 @@ export const corsOrigins = env.CORS_ORIGIN.split(',')
   .map((origem) => origem.trim())
   .filter(Boolean);
 
+/*
+ * Cada entrada de CORS_ORIGIN pode conter `*`, o que importa em produCao: os
+ * deploys de preview da Vercel recebem um dominio novo a cada push, e listar um
+ * a um seria inviavel. Ex.: "https://*.vercel.app".
+ *
+ * O `*` casa apenas dentro de um segmento — nao atravessa pontos nem barras —
+ * para que "https://*.vercel.app" nao libere "https://qualquer.coisa.com/
+ * .vercel.app". O restante do padrao e escapado e comparado literalmente.
+ */
+const padroesCors = corsOrigins.map((padrao) => {
+  const escapado = padrao.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\\\*/g, '[^./]*');
+  return new RegExp(`^${escapado}$`, 'i');
+});
+
+/** Uma origem e permitida quando casa com qualquer entrada de CORS_ORIGIN. */
+export function origemPermitida(origem: string): boolean {
+  return padroesCors.some((padrao) => padrao.test(origem));
+}
+
 const defaultUploadDir = process.env.VERCEL ? '/tmp/uploads' : resolve(process.cwd(), env.UPLOAD_DIR);
 
 export const uploadDir = defaultUploadDir;

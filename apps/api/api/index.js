@@ -1,13 +1,14 @@
 // Handler serverless da Vercel — encapsula a app Fastify compilada.
 //
-// O rewrite de /api/(.*) no vercel.json aponta para esta funcao. A Vercel
-// preserva a URL original em req.url ao aplicar o rewrite, entao o Fastify
-// continua enxergando /api/v1/... e casa suas rotas normalmente.
+// Este projeto na Vercel tem Root Directory = apps/api, entao esta pasta `api/`
+// e a que a Vercel varre em busca de funcoes. O rewrite do vercel.json manda
+// todo o trafego para ca preservando a URL original em req.url, e o Fastify
+// casa suas proprias rotas (/, /health, /api/v1/...) normalmente.
 //
 // A instancia do Fastify e reaproveitada entre invocacoes na mesma instancia
 // quente do lambda, evitando recriar o pool do Prisma a cada requisicao.
 
-import { criarApp } from '../apps/api/dist/app.js';
+import { criarApp } from '../dist/app.js';
 
 let appPromise = null;
 

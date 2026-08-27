@@ -1,21 +1,17 @@
 {
   "framework": null,
   "buildCommand": "npm run build",
-  "installCommand": "npm install",
-  "outputDirectory": "apps/web/dist",
+  "outputDirectory": "public",
   "functions": {
     "api/index.js": {
       "memory": 1024,
       "maxDuration": 60
     }
   },
-  "rewrites": [
-    { "source": "/api/v1/(.*)", "destination": "/api" },
-    { "source": "/(.*)", "destination": "/index.html" }
-  ],
+  "rewrites": [{ "source": "/(.*)", "destination": "/api" }],
   "headers": [
     {
-      "source": "/api/(.*)",
+      "source": "/(.*)",
       "headers": [{ "key": "Cache-Control", "value": "no-store" }]
     }
   ]

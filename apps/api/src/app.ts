@@ -4,7 +4,7 @@ import cors from '@fastify/cors';
 import multipart from '@fastify/multipart';
 import estaticos from '@fastify/static';
 import { APP_NOME } from '@safetyguard/shared';
-import { corsOrigins, env, isProducao, uploadDir, uploadMaxBytes } from './env.js';
+import { env, isProducao, origemPermitida, uploadDir, uploadMaxBytes } from './env.js';
 import { garantirDiretorioDeUpload, PREFIXO_PUBLICO } from './lib/arquivos.js';
 import { registrarTratadorDeErros } from './lib/tratador-erros.js';
 import { registrarAutenticacao, registrarEscopoNaResposta } from './lib/autenticacao.js';
@@ -43,7 +43,14 @@ export async function criarApp(): Promise<FastifyInstance> {
     bodyLimit: uploadMaxBytes + 1024 * 1024,
   });
 
-  await app.register(cors, { origin: corsOrigins, credentials: true });
+  /*
+   * Sem `origin` (ferramentas de linha de comando, health checks) nao ha o que
+   * proteger — a politica de CORS so vale para requisicoes vindas de um site.
+   */
+  await app.register(cors, {
+    origin: (origem, cb) => cb(null, !origem || origemPermitida(origem)),
+    credentials: true,
+  });
   await app.register(multipart, { limits: { fileSize: uploadMaxBytes, files: 1 } });
 
   /*
