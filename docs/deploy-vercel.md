@@ -119,6 +119,39 @@ Depois disso, abra o front e faça login.
 
 ## 5. Banco de dados
 
+### A `DATABASE_URL` de produção não é a mesma do desenvolvimento
+
+Esta é a pegadinha mais cara do deploy. A connection string direta que o painel
+do Supabase mostra primeiro:
+
+```
+postgresql://postgres:<senha>@db.<ref>.supabase.co:5432/postgres
+```
+
+resolve **apenas para IPv6** — esse host não tem registro A, só AAAA. As funções
+serverless da Vercel saem por IPv4, então nunca alcançam esse endereço. Da sua
+máquina funciona; de lá, o `/health` responde `banco: indisponivel`.
+
+Em produção use o **pooler**, que atende em IPv4:
+
+```
+postgresql://postgres.<ref>:<senha>@aws-0-<regiao>.pooler.supabase.com:6543/postgres?pgbouncer=true&connection_limit=1
+```
+
+Note as diferenças: o usuário vira `postgres.<ref>`, a porta é `6543`, e o
+`pgbouncer=true` é obrigatório — sem ele o Prisma tenta usar prepared statements,
+que o pooler em modo transação não suporta. O `connection_limit=1` evita que
+cada instância do lambda abra um pool próprio e esgote as conexões.
+
+A região aparece no painel do Supabase, em **Settings → Database → Connection
+pooling**. Neste projeto é `sa-east-1`.
+
+Para as **migrations** continue usando a conexão direta (porta 5432): elas
+precisam de advisory locks e prepared statements que o pooler em modo transação
+não oferece.
+
+### Aplicando as migrations
+
 As migrations **não rodam no deploy**. Aplique-as da sua máquina, apontando
 para o Supabase:
 
@@ -140,8 +173,9 @@ exemplo, e repetir gera duplicatas.
 **`/api/ping` devolve HTML em vez de JSON** — o Root Directory do projeto da
 API não é `apps/api`. Corrija em Settings → General e faça Redeploy.
 
-**`/health` responde `banco: indisponivel`** — `DATABASE_URL` errada ou ausente.
-O `/api/ping` mostra se a variável ao menos existe.
+**`/health` responde `banco: indisponivel`** — quase sempre é a `DATABASE_URL`
+apontando para o host direto do Supabase, que só tem IPv6. Veja a seção 5. O
+`/api/ping` confirma se a variável ao menos existe.
 
 **Erro de CORS no navegador** — `CORS_ORIGIN` na API não inclui o domínio do
 front. Lembre do Redeploy depois de corrigir.
