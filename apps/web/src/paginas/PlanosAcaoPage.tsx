@@ -438,6 +438,9 @@ export function PlanosAcaoPage() {
                           <Link className="btn btn-outline btn-sm" to={`/planos-acao/${plano.id}`}>
                             Tratar
                           </Link>
+                          <Link className="btn btn-ghost btn-sm" to={`/planos-acao/${plano.id}/apresentacao`} title="Documento da reunião de tratativa, pronto para imprimir">
+                            Apresentação
+                          </Link>
                         </div>
                       </td>
                     </tr>

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { nivelDeMaturidade } from '@safetyguard/shared';
+import { PESOS_INDICE_GLOBAL, nivelDeMaturidade, type PilarIndiceGlobal } from '@safetyguard/shared';
 import { Farol } from '../componentes/Icone';
 import { Campo } from '../componentes/Campo';
 import { useToast } from '../componentes/Toast';
@@ -12,6 +12,21 @@ interface OpcaoCliente {
   id: string;
   nomeFantasia: string;
 }
+
+/**
+ * Origem de cada pilar, em linguagem de negócio. Espelha o que o servidor usa
+ * em `painelExecutivo`; se a fonte mudar lá, muda-se aqui — o índice não pode
+ * ser caixa-preta para quem o lê.
+ */
+const ORIGEM_PILAR: Record<PilarIndiceGlobal, string> = {
+  SEGURANCA: 'Acidentes e quase-acidentes registrados nos últimos 12 meses, ponderados pela gravidade da pirâmide de Bird, sobre o total de registros.',
+  CULTURA_SEGURANCA: 'ICSG — índice de cultura: comportamentos seguros (40%), condições inseguras invertidas (20%), planos concluídos (20%), inspeções (10%) e treinamentos (10%).',
+  GESTAO_RISCOS: 'Inventário de riscos: proporção de riscos controlados ou monitorados sobre os identificados, ponderada pelo IIR.',
+  PLANO_ACAO: 'Percentual de planos de ação concluídos dentro do prazo no período.',
+  AUDITORIAS: 'Média de conformidade das auditorias concluídas nos últimos 12 meses.',
+  MEIO_AMBIENTE: 'Ocorrências ambientais tratadas e leituras ESG dentro da meta.',
+  TREINAMENTOS: 'Colaboradores com os treinamentos exigidos pela matriz de capacitação em dia.',
+};
 
 interface OpcaoCentro {
   id: string;
@@ -212,6 +227,43 @@ export function DashboardExecutivoPage() {
           <b>Segurança</b> usa {painel.seguranca.acidentes} acidente(s) e {painel.seguranca.quaseAcidentes} quase-acidente(s)
           em {painel.seguranca.registros} registros. {painel.seguranca.observacao}
         </p>
+
+        <details style={{ marginTop: 12 }}>
+          <summary style={{ cursor: 'pointer', fontWeight: 600 }}>Como o índice é calculado — fórmula e origem de cada componente</summary>
+          <div style={{ marginTop: 10 }}>
+            <p style={{ fontFamily: 'var(--mono)', fontSize: 13, padding: '8px 12px', background: 'var(--superficie-2)', borderRadius: 6 }}>
+              Índice Global = Σ (nota do pilar × peso) ÷ Σ (pesos dos pilares com dado) × 100
+            </p>
+            <p className="hint">
+              Cada nota vai de 0 a 100. Os pesos somam 100% quando todos os pilares têm dado; quando algum não tem, os
+              demais são reponderados proporcionalmente — por isso o cartão mostra “calculado sobre X% dos pesos”. A
+              escala de leitura é a mesma para todo indicador: ≥95 Excelente · 90–94,9 Muito Bom · 80–89,9 Bom · 70–79,9
+              Atenção · &lt;70 Crítico.
+            </p>
+            <div className="tbl-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Pilar</th>
+                    <th>Peso</th>
+                    <th>De onde vem a nota</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {PESOS_INDICE_GLOBAL.map((p) => (
+                    <tr key={p.pilar}>
+                      <td>
+                        <b>{p.rotulo}</b>
+                      </td>
+                      <td>{p.peso}%</td>
+                      <td className="hint">{ORIGEM_PILAR[p.pilar]}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </details>
       </div>
 
       <div className="painel">

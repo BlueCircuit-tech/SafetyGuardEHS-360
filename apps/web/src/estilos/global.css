@@ -2335,6 +2335,193 @@ a.stat:hover {
 }
 
 /* ==========================================================================
+   Etapa 23 — Investigacao estruturada e documentacao tecnica
+   ========================================================================== */
+
+.lista-editavel-itens {
+  list-style: none;
+  margin: 0 0 8px;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.lista-editavel-itens li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  background: var(--superficie-2);
+  border-radius: 6px;
+  font-size: 13px;
+}
+
+.lista-editavel-itens li .texto {
+  flex: 1;
+}
+
+.lista-editavel-itens .ordem {
+  font-weight: 600;
+  color: var(--primary);
+  white-space: nowrap;
+  min-width: 84px;
+}
+
+.lista-editavel-nova {
+  display: flex;
+  gap: 6px;
+}
+
+.lista-editavel-nova input {
+  flex: 1;
+}
+
+/* Ishikawa: as seis categorias em grade, cada uma com a pergunta-guia. */
+.ishikawa-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 14px;
+}
+
+.ishikawa-categoria {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+}
+
+.ishikawa-categoria > h5 {
+  margin: 0 0 2px;
+  font-size: 13px;
+}
+
+.ishikawa-categoria > .hint {
+  margin-bottom: 8px;
+}
+
+/* Folhas imprimiveis (OS, apresentacao, relatorio diario) */
+.folha {
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+.folha-cabecalho {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  border-bottom: 2px solid var(--primary);
+  padding-bottom: 12px;
+  margin-bottom: 16px;
+}
+
+.folha-cabecalho h2 {
+  margin: 0;
+  font-size: 20px;
+}
+
+.folha-cabecalho .meta {
+  text-align: right;
+  font-size: 12px;
+  color: var(--texto-medio);
+}
+
+.folha-secao {
+  margin-bottom: 18px;
+  break-inside: avoid;
+}
+
+.folha-secao > h4 {
+  margin: 0 0 8px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--border);
+  font-size: 14px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--texto-medio);
+}
+
+.folha-dados {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 8px 16px;
+  font-size: 13px;
+}
+
+.folha-dados dt {
+  color: var(--texto-medio);
+  font-size: 11px;
+  text-transform: uppercase;
+}
+
+.folha-dados dd {
+  margin: 0;
+  font-weight: 500;
+}
+
+.folha-assinatura {
+  margin-top: 28px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 32px;
+}
+
+.folha-assinatura > div {
+  border-top: 1px solid var(--texto);
+  padding-top: 6px;
+  font-size: 12px;
+  text-align: center;
+}
+
+.folha-assinatura img {
+  max-height: 60px;
+  display: block;
+  margin: 0 auto 4px;
+}
+
+.carimbo {
+  font-family: ui-monospace, monospace;
+  font-size: 10px;
+  color: var(--texto-medio);
+  word-break: break-all;
+}
+
+.evidencia-thumb {
+  max-width: 160px;
+  max-height: 120px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+}
+
+/* Checklist: linha por item com conforme / nao conforme */
+.checklist-item {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px 12px;
+  align-items: center;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.checklist-item .escolha {
+  display: flex;
+  gap: 4px;
+}
+
+.checklist-item .escolha button.ativo-ok {
+  background: var(--green);
+  color: #fff;
+}
+
+.checklist-item .escolha button.ativo-bad {
+  background: var(--red);
+  color: #fff;
+}
+
+.checklist-item input {
+  grid-column: 1 / -1;
+}
+
+/* ==========================================================================
    Impressao
    ========================================================================== */
 

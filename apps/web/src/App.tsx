@@ -46,6 +46,11 @@ import { AfastamentoFormPage } from './paginas/AfastamentoFormPage';
 import { MapaPlantaPage } from './paginas/MapaPlantaPage';
 import { BenchmarkSupervisoresPage } from './paginas/BenchmarkSupervisoresPage';
 import { IndicadoresFinanceirosPage } from './paginas/IndicadoresFinanceirosPage';
+import { RelatorioDiarioPage } from './paginas/RelatorioDiarioPage';
+import { PlanoApresentacaoPage } from './paginas/PlanoApresentacaoPage';
+import { OrdensServicoPage } from './paginas/OrdensServicoPage';
+import { AprPage } from './paginas/AprPage';
+import { ChecklistsPage } from './paginas/ChecklistsPage';
 
 /**
  * Exige sessão válida — e, opcionalmente, uma permissão.
@@ -153,6 +158,7 @@ export function App() {
 
               {rota('planos-acao', 'planos:ler', <PlanosAcaoPage />)}
               {rota('planos-acao/novo', 'planos:escrever', <PlanoAcaoFormPage />)}
+              {rota('planos-acao/:id/apresentacao', 'planos:ler', <PlanoApresentacaoPage />)}
               {rota('planos-acao/:id', 'planos:ler', <PlanoAcaoFormPage />)}
 
               {rota('colaboradores', 'saude:ler', <ColaboradoresPage />)}
@@ -174,6 +180,10 @@ export function App() {
               {rota('meio-ambiente', 'observacoes:ler', <MeioAmbientePage />)}
               {rota('inteligencia', 'indicadores:ler', <InteligenciaPage />)}
               {rota('acidentes', 'planos:ler', <AcidentesPage />)}
+              {rota('acidentes/relatorio-diario', 'planos:ler', <RelatorioDiarioPage />)}
+              {rota('ordens-servico', 'saude:ler', <OrdensServicoPage />)}
+              {rota('aprs', 'observacoes:ler', <AprPage />)}
+              {rota('checklists', 'observacoes:ler', <ChecklistsPage />)}
               {rota('riscos', 'cadastros:ler', <RiscosPage />)}
 
               {rota('dashboard-executivo', 'indicadores:ler', <DashboardExecutivoPage />)}

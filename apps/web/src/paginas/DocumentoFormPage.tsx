@@ -103,8 +103,19 @@ export function DocumentoFormPage() {
   const [areas, setAreas] = useState<Opcao[]>([]);
   const [colaboradores, setColaboradores] = useState<Opcao[]>([]);
   const [observacoes, setObservacoes] = useState<Array<{ id: string; descricao: string; dataHora: string }>>([]);
-  const [aba, setAba] = useState<'cadastro' | 'historico'>('cadastro');
+  const [aba, setAba] = useState<'cadastro' | 'historico' | 'versoes'>('cadastro');
   const [auditoria, setAuditoria] = useState<RegistroAuditoria[]>([]);
+  const [versoes, setVersoes] = useState<Array<DocumentoApi & { versao: number; vigente: boolean }>>([]);
+
+  // A cadeia de versoes so e buscada quando a aba abre — e navegavel a partir
+  // de qualquer versao, entao serve tanto para a vigente quanto para as antigas.
+  useEffect(() => {
+    if (aba !== 'versoes' || !id) return;
+    void api
+      .get<Array<DocumentoApi & { versao: number; vigente: boolean }>>(`/documentos/${id}/versoes`)
+      .then(setVersoes)
+      .catch(() => setVersoes([]));
+  }, [aba, id]);
 
   const {
     register,
@@ -334,6 +345,9 @@ export function DocumentoFormPage() {
           <button type="button" className={aba === 'historico' ? 'ativa' : ''} onClick={() => setAba('historico')}>
             Histórico
           </button>
+          <button type="button" className={aba === 'versoes' ? 'ativa' : ''} onClick={() => setAba('versoes')}>
+            Versões
+          </button>
         </div>
       ) : null}
 
@@ -539,6 +553,67 @@ export function DocumentoFormPage() {
             <p className="hint">Seu perfil pode consultar, mas não editar este cadastro.</p>
           )}
         </form>
+      ) : aba === 'versoes' ? (
+        <div className="painel">
+          <h3>Versões do documento</h3>
+          <p className="desc">
+            Cada revisão é um registro novo que aponta para o anterior. A versão antiga permanece exatamente como foi
+            emitida — a evidência não muda depois de substituída.
+          </p>
+          {versoes.length === 0 ? (
+            <p className="hint">Carregando...</p>
+          ) : (
+            <div className="tbl-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Versão</th>
+                    <th>Revisão</th>
+                    <th>Emissão</th>
+                    <th>Validade</th>
+                    <th>Situação</th>
+                    <th>Arquivo</th>
+                    <th aria-label="Ações" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {versoes.map((v) => (
+                    <tr key={v.id} style={v.id === id ? { background: 'var(--primary-soft)' } : undefined}>
+                      <td>
+                        <b>v{v.versao}</b>
+                        {v.vigente ? <span className="pill ok" style={{ marginLeft: 6 }}>vigente</span> : null}
+                      </td>
+                      <td>{v.revisao ?? '—'}</td>
+                      <td>{formatarDataIso(v.dataEmissao)}</td>
+                      <td>{v.validade ? formatarDataIso(v.validade) : 'sem prazo'}</td>
+                      <td>
+                        <span className={`pill ${v.situacao === 'ATIVO' ? 'ok' : 'gray'}`}>{v.situacao}</span>
+                      </td>
+                      <td>
+                        {v.arquivoUrl ? (
+                          <a href={urlAbsoluta(v.arquivoUrl) ?? '#'} target="_blank" rel="noreferrer">
+                            Abrir
+                          </a>
+                        ) : (
+                          '—'
+                        )}
+                      </td>
+                      <td>
+                        {v.id !== id ? (
+                          <Link className="btn btn-ghost btn-sm" to={`/documentos/${v.id}`}>
+                            Ver
+                          </Link>
+                        ) : (
+                          <span className="hint">esta</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
       ) : (
         <div className="painel">
           <h3>Histórico de alterações</h3>

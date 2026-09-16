@@ -1,14 +1,22 @@
 import { useCallback, useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import {
+  CATEGORIAS_ISHIKAWA,
+  ISHIKAWA_VAZIO,
+  PERGUNTA_ISHIKAWA,
   ROTULO_INVESTIGACAO,
+  ROTULO_ISHIKAWA,
   ROTULO_TIPO_ACIDENTE,
   SITUACOES_INVESTIGACAO,
   TIPOS_ACIDENTE,
+  totalCausasIshikawa,
+  type Ishikawa,
   type SituacaoInvestigacao,
   type TipoAcidente,
 } from '@safetyguard/shared';
 import { Campo } from '../componentes/Campo';
 import { Icone } from '../componentes/Icone';
+import { ListaEditavel } from '../componentes/ListaEditavel';
 import { useToast } from '../componentes/Toast';
 import { ErroApi, api } from '../lib/api';
 import { formatarDataIso } from '../lib/datas';
@@ -28,6 +36,9 @@ interface AcidenteApi {
   situacaoInvestigacao: SituacaoInvestigacao;
   investigador: string | null;
   causaRaiz: string | null;
+  ishikawa: Ishikawa | null;
+  cincoPorques: string[] | null;
+  causasIshikawa?: number;
   cliente?: { id: string; nomeFantasia: string };
   area?: { id: string; nome: string } | null;
   colaborador?: { id: string; nome: string; funcao: string } | null;
@@ -73,7 +84,11 @@ const NOVO_VAZIO = {
   investigador: '',
   situacaoInvestigacao: 'ABERTA' as SituacaoInvestigacao,
   causaRaiz: '',
+  ishikawa: ISHIKAWA_VAZIO as Ishikawa,
+  cincoPorques: [] as string[],
 };
+
+const FILTRO_VAZIO = { busca: '', de: '', ate: '', situacaoInvestigacao: '' };
 
 export function AcidentesPage() {
   const { mostrar } = useToast();
@@ -86,6 +101,7 @@ export function AcidentesPage() {
   const [clientes, setClientes] = useState<OpcaoCliente[]>([]);
   const [colaboradores, setColaboradores] = useState<OpcaoColaborador[]>([]);
 
+  const [filtro, setFiltro] = useState(FILTRO_VAZIO);
   const [novo, setNovo] = useState(NOVO_VAZIO);
   const [salvando, setSalvando] = useState(false);
   const [editandoId, setEditandoId] = useState<string | null>(null);
@@ -93,8 +109,15 @@ export function AcidentesPage() {
   const carregar = useCallback(async () => {
     setCarregando(true);
     try {
+      const parametros = new URLSearchParams();
+      if (filtro.busca) parametros.set('busca', filtro.busca);
+      if (filtro.de) parametros.set('de', filtro.de);
+      if (filtro.ate) parametros.set('ate', filtro.ate);
+      if (filtro.situacaoInvestigacao) parametros.set('situacaoInvestigacao', filtro.situacaoInvestigacao);
+      const consulta = parametros.toString();
+
       const [lista, cards] = await Promise.all([
-        api.get<AcidenteApi[]>('/acidentes'),
+        api.get<AcidenteApi[]>(`/acidentes${consulta ? `?${consulta}` : ''}`),
         api.get<ResumoAcidentes>('/acidentes/resumo'),
       ]);
       setItens(lista);
@@ -104,7 +127,7 @@ export function AcidentesPage() {
     } finally {
       setCarregando(false);
     }
-  }, [mostrar]);
+  }, [filtro, mostrar]);
 
   useEffect(() => {
     void api.get<OpcaoCliente[]>('/clientes/opcoes').then(setClientes).catch(() => setClientes([]));
@@ -115,6 +138,8 @@ export function AcidentesPage() {
   async function salvar() {
     setSalvando(true);
     try {
+      // Ishikawa sem nenhuma causa e 5 Porques vazio vao como null — "nao
+      // preenchido", nao "preenchido com nada".
       const corpo = {
         ...novo,
         colaboradorId: novo.colaboradorId || undefined,
@@ -122,6 +147,8 @@ export function AcidentesPage() {
         catNumero: novo.catNumero || undefined,
         investigador: novo.investigador || undefined,
         causaRaiz: novo.causaRaiz || undefined,
+        ishikawa: totalCausasIshikawa(novo.ishikawa) > 0 ? novo.ishikawa : null,
+        cincoPorques: novo.cincoPorques.length > 0 ? novo.cincoPorques : null,
       };
 
       if (editandoId) {
@@ -156,8 +183,14 @@ export function AcidentesPage() {
       investigador: acidente.investigador ?? '',
       situacaoInvestigacao: acidente.situacaoInvestigacao,
       causaRaiz: acidente.causaRaiz ?? '',
+      ishikawa: { ...ISHIKAWA_VAZIO, ...(acidente.ishikawa ?? {}) },
+      cincoPorques: acidente.cincoPorques ?? [],
     });
     window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  function definirIshikawa(categoria: (typeof CATEGORIAS_ISHIKAWA)[number], causas: string[]) {
+    setNovo({ ...novo, ishikawa: { ...novo.ishikawa, [categoria]: causas } });
   }
 
   return (
@@ -278,14 +311,51 @@ export function AcidentesPage() {
           </div>
 
           {novo.situacaoInvestigacao !== 'ABERTA' ? (
-            <Campo
-              label="Causa raiz"
-              htmlFor="ac-causa"
-              obrigatorio={novo.situacaoInvestigacao === 'CONCLUIDA'}
-              ajuda="Obrigatória para concluir a investigação."
-            >
-              <textarea id="ac-causa" rows={2} value={novo.causaRaiz} onChange={(e) => setNovo({ ...novo, causaRaiz: e.target.value })} />
-            </Campo>
+            <>
+              <h4>Diagrama de Ishikawa (6M)</h4>
+              <p className="desc">
+                Levante as causas possíveis em cada categoria. A pergunta-guia ajuda a não deixar categoria em branco por
+                esquecimento — em branco por não se aplicar é legítimo.
+              </p>
+              <div className="ishikawa-grid">
+                {CATEGORIAS_ISHIKAWA.map((categoria) => (
+                  <div key={categoria} className="ishikawa-categoria">
+                    <h5>
+                      {ROTULO_ISHIKAWA[categoria]}
+                      {novo.ishikawa[categoria].length > 0 ? <span className="pill gray"> {novo.ishikawa[categoria].length}</span> : null}
+                    </h5>
+                    <div className="hint">{PERGUNTA_ISHIKAWA[categoria]}</div>
+                    <ListaEditavel
+                      itens={novo.ishikawa[categoria]}
+                      onChange={(causas) => definirIshikawa(categoria, causas)}
+                      placeholder="Causa possível"
+                    />
+                  </div>
+                ))}
+              </div>
+
+              <h4>5 Porquês</h4>
+              <p className="desc">
+                Parta do fato e pergunte “por quê?” até chegar a uma causa que a organização consegue controlar. Cinco é
+                a convenção; a cadeia para quando chega lá.
+              </p>
+              <ListaEditavel
+                itens={novo.cincoPorques}
+                onChange={(cincoPorques) => setNovo({ ...novo, cincoPorques })}
+                placeholder={novo.cincoPorques.length === 0 ? 'O que aconteceu?' : 'Por quê?'}
+                numerada
+                maximo={7}
+              />
+
+              <Campo
+                label="Causa raiz"
+                htmlFor="ac-causa"
+                obrigatorio={novo.situacaoInvestigacao === 'CONCLUIDA'}
+                ajuda="A conclusão da análise. Obrigatória para concluir a investigação."
+              >
+                <textarea id="ac-causa" rows={2} value={novo.causaRaiz} onChange={(e) => setNovo({ ...novo, causaRaiz: e.target.value })} />
+              </Campo>
+            </>
           ) : null}
 
           <div className="barra-acoes">
@@ -314,6 +384,33 @@ export function AcidentesPage() {
       ) : null}
 
       <div className="painel">
+        <div className="filtros">
+          <Campo label="Buscar" htmlFor="fa-busca" ajuda="Descrição, causa raiz, colaborador, área ou nº da CAT.">
+            <input id="fa-busca" value={filtro.busca} onChange={(e) => setFiltro({ ...filtro, busca: e.target.value })} placeholder="Texto livre" />
+          </Campo>
+          <Campo label="De" htmlFor="fa-de">
+            <input id="fa-de" type="date" value={filtro.de} onChange={(e) => setFiltro({ ...filtro, de: e.target.value })} />
+          </Campo>
+          <Campo label="Até" htmlFor="fa-ate">
+            <input id="fa-ate" type="date" value={filtro.ate} onChange={(e) => setFiltro({ ...filtro, ate: e.target.value })} />
+          </Campo>
+          <Campo label="Investigação" htmlFor="fa-sit">
+            <select id="fa-sit" value={filtro.situacaoInvestigacao} onChange={(e) => setFiltro({ ...filtro, situacaoInvestigacao: e.target.value })}>
+              <option value="">Todas</option>
+              {SITUACOES_INVESTIGACAO.map((situacao) => (
+                <option key={situacao} value={situacao}>
+                  {ROTULO_INVESTIGACAO[situacao]}
+                </option>
+              ))}
+            </select>
+          </Campo>
+          <div style={{ alignSelf: 'end' }}>
+            <Link to="/acidentes/relatorio-diario" className="btn btn-ghost">
+              <Icone nome="documento" /> Relatório diário
+            </Link>
+          </div>
+        </div>
+
         {carregando ? (
           <div className="centro-tela">
             <div className="spinner" />
@@ -324,8 +421,8 @@ export function AcidentesPage() {
             <div className="icone-vazio" aria-hidden="true">
               <Icone nome="ok" tamanho={22} />
             </div>
-            <h4>Nenhum acidente registrado</h4>
-            <p>É a meta. Quando houver registro, a CAT e a investigação são cobradas aqui.</p>
+            <h4>{filtro.busca || filtro.de || filtro.ate || filtro.situacaoInvestigacao ? 'Nada encontrado com esses filtros' : 'Nenhum acidente registrado'}</h4>
+            <p>{filtro.busca ? 'Tente outro termo ou limpe os filtros.' : 'É a meta. Quando houver registro, a CAT e a investigação são cobradas aqui.'}</p>
           </div>
         ) : (
           <div className="tbl-wrap">
@@ -374,6 +471,13 @@ export function AcidentesPage() {
                         {acidente.rotulos?.investigacao ?? acidente.situacaoInvestigacao}
                       </span>
                       {acidente.causaRaiz ? <div className="hint">{acidente.causaRaiz.slice(0, 60)}</div> : null}
+                      {(acidente.causasIshikawa ?? 0) > 0 || (acidente.cincoPorques?.length ?? 0) > 0 ? (
+                        <div className="hint">
+                          {acidente.causasIshikawa ? `Ishikawa: ${acidente.causasIshikawa} causa(s)` : null}
+                          {acidente.causasIshikawa && acidente.cincoPorques?.length ? ' · ' : null}
+                          {acidente.cincoPorques?.length ? `${acidente.cincoPorques.length} porquê(s)` : null}
+                        </div>
+                      ) : null}
                     </td>
                     {podeEscrever ? (
                       <td>
