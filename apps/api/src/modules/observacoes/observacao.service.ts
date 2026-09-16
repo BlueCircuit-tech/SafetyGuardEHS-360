@@ -333,18 +333,37 @@ export async function excluirObservacao(id: string, contexto: ContextoAuditoria 
   });
 }
 
+/**
+ * Carimbo que acompanha o upload da assinatura: hash do arquivo + quem + quando.
+ * Sem ele a imagem e apenas uma foto; com ele, trocar o arquivo depois
+ * invalida o carimbo.
+ */
+export interface CarimboAssinatura {
+  hash: string;
+  em: Date;
+  por: string;
+}
+
 export async function definirArquivo(
   id: string,
   campo: 'fotoUrl' | 'assinaturaUrl',
   url: string | null,
   contexto: ContextoAuditoria = {},
+  carimbo?: CarimboAssinatura,
 ): Promise<Observacao> {
   await obterObservacaoOuFalhar(id);
+
+  const dadosCarimbo =
+    campo === 'assinaturaUrl'
+      ? carimbo
+        ? { assinaturaHash: carimbo.hash, assinaturaEm: carimbo.em, assinaturaPor: carimbo.por }
+        : { assinaturaHash: null, assinaturaEm: null, assinaturaPor: null }
+      : {};
 
   return prisma.$transaction(async (tx) => {
     const observacao = await tx.observacao.update({
       where: { id },
-      data: { [campo]: url },
+      data: { [campo]: url, ...dadosCarimbo },
       include: COM_RELACOES,
     });
 
@@ -352,7 +371,10 @@ export async function definirArquivo(
       entidade: ENTIDADE,
       entidadeId: id,
       acao: 'ATUALIZACAO',
-      alteracoes: { [campo]: { de: null, para: url } },
+      alteracoes: {
+        [campo]: { de: null, para: url },
+        ...(carimbo ? { assinaturaHash: { de: null, para: carimbo.hash } } : {}),
+      },
       contexto,
     });
 

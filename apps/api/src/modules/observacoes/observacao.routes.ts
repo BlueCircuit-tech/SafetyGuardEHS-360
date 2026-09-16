@@ -30,6 +30,7 @@ import {
 import { painelBbs, resumoObservacoes } from './indicadores.service.js';
 import { prisma } from '../../db.js';
 import { MIMES_IMAGEM_ACEITOS, removerArquivoPublico, salvarImagem } from '../../lib/arquivos.js';
+import { carimbar } from '../../lib/assinatura.js';
 import { NaoEncontrado, RequisicaoInvalida } from '../../lib/erros.js';
 import { contextoDeAuditoria } from '../../lib/autenticacao.js';
 import { guardaPorMetodo } from '../../lib/guarda.js';
@@ -305,7 +306,21 @@ export async function rotasObservacoes(app: FastifyInstance): Promise<void> {
 
       const conteudo = await arquivo.toBuffer();
       const url = await salvarImagem(conteudo, arquivo.mimetype, prefixo);
-      const atualizada = await definirArquivo(id, campo, url, contextoDeAuditoria(request));
+
+      /*
+       * A assinatura recebe carimbo: hash do arquivo + observador + momento.
+       * O momento e fixado aqui e gravado junto, para que a verificacao use
+       * exatamente o mesmo instante.
+       */
+      const carimbo =
+        campo === 'assinaturaUrl'
+          ? (() => {
+              const em = new Date();
+              return { em, por: atual.observador, hash: carimbar({ conteudo, signatario: atual.observador, momento: em }) };
+            })()
+          : undefined;
+
+      const atualizada = await definirArquivo(id, campo, url, contextoDeAuditoria(request), carimbo);
 
       await removerArquivoPublico(atual[campo]);
 

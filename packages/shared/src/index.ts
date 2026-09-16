@@ -33,6 +33,7 @@ export * from './schemas/meio-ambiente.js';
 export * from './schemas/acidente.js';
 export * from './schemas/risco-inventario.js';
 export * from './schemas/afastamento.js';
+export * from './schemas/documentacao-tecnica.js';
 export * from './indicadores/index.js';
 export * from './institucional.js';
 

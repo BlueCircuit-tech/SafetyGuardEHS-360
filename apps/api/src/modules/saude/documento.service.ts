@@ -244,13 +244,29 @@ export async function revisarDocumento(
     );
   }
 
-  const { id: _id, criadoEm: _criadoEm, atualizadoEm: _atualizadoEm, ...campos } = anterior;
+  // Os campos de versao nao se copiam: cada versao tem os seus.
+  const {
+    id: _id,
+    criadoEm: _criadoEm,
+    atualizadoEm: _atualizadoEm,
+    versao: _versao,
+    vigente: _vigente,
+    versaoAnteriorId: _versaoAnteriorId,
+    ...campos
+  } = anterior;
 
   return prisma.$transaction(async (tx) => {
-    await tx.documentoSsma.update({ where: { id }, data: { situacao: 'SUBSTITUIDO' } });
+    await tx.documentoSsma.update({ where: { id }, data: { situacao: 'SUBSTITUIDO', vigente: false } });
 
     const novo = await tx.documentoSsma.create({
-      data: { ...campos, ...dados, situacao: 'ATIVO' } as Prisma.DocumentoSsmaUncheckedCreateInput,
+      data: {
+        ...campos,
+        ...dados,
+        situacao: 'ATIVO',
+        versao: anterior.versao + 1,
+        vigente: true,
+        versaoAnteriorId: id,
+      } as Prisma.DocumentoSsmaUncheckedCreateInput,
     });
 
     await registrarAuditoria(tx, {
@@ -271,6 +287,48 @@ export async function revisarDocumento(
 
     return novo;
   });
+}
+
+/**
+ * Historico completo de versoes do documento, da mais antiga para a mais nova.
+ *
+ * Parte de qualquer versao da cadeia: anda para tras ate a primeira e depois
+ * para frente ate a vigente. Cada versao permanece exatamente como foi
+ * emitida — o historico e para consulta, nao para edicao.
+ */
+export async function listarVersoesDocumento(id: string) {
+  const inicial = await prisma.documentoSsma.findUnique({
+    where: { id },
+    select: { id: true, versaoAnteriorId: true },
+  });
+  if (!inicial) throw new NaoEncontrado('Documento nao encontrado.', 'DOCUMENTO_NAO_ENCONTRADO');
+
+  // Para tras, ate a primeira versao.
+  let raizId = inicial.id;
+  let anteriorId = inicial.versaoAnteriorId;
+  while (anteriorId) {
+    const anterior = await prisma.documentoSsma.findUnique({
+      where: { id: anteriorId },
+      select: { id: true, versaoAnteriorId: true },
+    });
+    if (!anterior) break;
+    raizId = anterior.id;
+    anteriorId = anterior.versaoAnteriorId;
+  }
+
+  // Para frente, ate a vigente.
+  const versoes: Array<Awaited<ReturnType<typeof obterDocumentoOuFalhar>>> = [];
+  let atualId: string | null = raizId;
+  while (atualId) {
+    const seguinte: { id: string } | null = await prisma.documentoSsma
+      .findUnique({ where: { id: atualId }, select: { versaoSeguinte: { select: { id: true } } } })
+      .then((doc) => doc?.versaoSeguinte ?? null);
+
+    versoes.push(await obterDocumentoOuFalhar(atualId));
+    atualId = seguinte?.id ?? null;
+  }
+
+  return versoes;
 }
 
 export async function excluirDocumento(id: string, contexto: ContextoAuditoria = {}): Promise<void> {

@@ -32,6 +32,7 @@ import {
   resumoPlanos,
 } from './plano.service.js';
 import { listarNotificacoes, resumoNotificacoes } from './notificacao.service.js';
+import { prisma } from '../../db.js';
 import { MIMES_IMAGEM_ACEITOS, removerArquivoPublico, salvarImagem } from '../../lib/arquivos.js';
 import { RequisicaoInvalida } from '../../lib/erros.js';
 import { contextoDeAuditoria } from '../../lib/autenticacao.js';
@@ -114,6 +115,62 @@ export async function rotasPlanos(app: FastifyInstance): Promise<void> {
   app.get('/planos-acao/:id', async (request) => {
     const { id } = paramsSchema.parse(request.params);
     return serializar(await obterPlanoOuFalhar(id));
+  });
+
+  /**
+   * Apresentacao do plano: tudo que a reuniao de tratativa precisa, num so
+   * documento — a ocorrencia de origem com evidencia e classificacao, a
+   * investigacao (Ishikawa e 5 Porques quando ha acidente), o plano com
+   * responsavel e prazo, a linha do tempo de escalonamento e comunicacao.
+   * O front renderiza como pagina imprimivel; nada e digitado duas vezes.
+   */
+  app.get('/planos-acao/:id/apresentacao', async (request) => {
+    const { id } = paramsSchema.parse(request.params);
+    const plano = serializar(await obterPlanoOuFalhar(id));
+
+    const [empresa, cliente, observacao, acidentes, riscos, notificacoes, auditoria] = await Promise.all([
+      prisma.empresaConsultoria.findFirst({ select: { nomeFantasia: true, razaoSocial: true, logoUrl: true } }),
+      prisma.cliente.findUnique({
+        where: { id: plano.clienteId },
+        select: { id: true, nomeFantasia: true, razaoSocial: true, cnpj: true, logoUrl: true },
+      }),
+      plano.observacaoId
+        ? prisma.observacao.findUnique({
+            where: { id: plano.observacaoId },
+            include: {
+              area: { select: { nome: true, codigo: true } },
+              terceiro: { select: { razaoSocial: true } },
+              causa: { select: { descricao: true } },
+            },
+          })
+        : Promise.resolve(null),
+      prisma.acidente.findMany({
+        where: { planoAcaoId: id },
+        include: { colaborador: { select: { nome: true, funcao: true } } },
+      }),
+      prisma.inventarioRisco.findMany({
+        where: { planoAcaoId: id },
+        select: { perigo: true, tipo: true, iir: true, grauRisco: true, medidasPropostas: true },
+      }),
+      prisma.notificacao.findMany({
+        where: { planoAcaoId: id },
+        orderBy: { criadoEm: 'asc' },
+        select: { canal: true, status: true, prioridade: true, nivelEscalonamento: true, destinatarios: true, criadoEm: true },
+      }),
+      listarAuditoriaPlano(id, 100),
+    ]);
+
+    return {
+      geradoEm: new Date(),
+      empresa,
+      cliente,
+      plano,
+      observacao,
+      acidentes,
+      riscos,
+      notificacoes,
+      linhaDoTempo: auditoria,
+    };
   });
 
   app.post('/planos-acao', async (request, reply) => {

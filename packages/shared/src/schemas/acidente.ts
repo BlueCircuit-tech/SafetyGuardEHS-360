@@ -31,6 +31,70 @@ export const ROTULO_INVESTIGACAO: Record<SituacaoInvestigacao, string> = {
 /** Prazo legal da CAT: ate o 1o dia util seguinte (obito: imediato). */
 export const PRAZO_CAT_DIAS_UTEIS = 1;
 
+/* -------------------------------------------------------------------------- */
+/* Investigacao estruturada: Ishikawa (6M) e 5 Porques                        */
+/* -------------------------------------------------------------------------- */
+
+export const CATEGORIAS_ISHIKAWA = ['metodo', 'maquina', 'material', 'maoDeObra', 'medida', 'meioAmbiente'] as const;
+export type CategoriaIshikawa = (typeof CATEGORIAS_ISHIKAWA)[number];
+
+export const ROTULO_ISHIKAWA: Record<CategoriaIshikawa, string> = {
+  metodo: 'Metodo',
+  maquina: 'Maquina',
+  material: 'Material',
+  maoDeObra: 'Mao de obra',
+  medida: 'Medida',
+  meioAmbiente: 'Meio ambiente',
+};
+
+/** Pergunta-guia de cada M, para orientar quem investiga. */
+export const PERGUNTA_ISHIKAWA: Record<CategoriaIshikawa, string> = {
+  metodo: 'O procedimento existia, era conhecido e foi seguido?',
+  maquina: 'O equipamento estava integro, protegido e adequado a tarefa?',
+  material: 'O material ou insumo tinha a qualidade e a condicao esperadas?',
+  maoDeObra: 'A pessoa estava treinada, habilitada e em condicoes de executar?',
+  medida: 'Havia inspecao, medicao ou controle que deveria ter detectado o problema?',
+  meioAmbiente: 'Iluminacao, ruido, piso, clima ou layout contribuiram?',
+};
+
+const listaDeCausas = z.array(z.string().trim().min(3).max(300)).max(20).default([]);
+
+/** Cada categoria e uma lista de causas; categoria vazia e permitida. */
+export const ishikawaSchema = z.object({
+  metodo: listaDeCausas,
+  maquina: listaDeCausas,
+  material: listaDeCausas,
+  maoDeObra: listaDeCausas,
+  medida: listaDeCausas,
+  meioAmbiente: listaDeCausas,
+});
+export type Ishikawa = z.output<typeof ishikawaSchema>;
+
+export const ISHIKAWA_VAZIO: Ishikawa = {
+  metodo: [],
+  maquina: [],
+  material: [],
+  maoDeObra: [],
+  medida: [],
+  meioAmbiente: [],
+};
+
+/**
+ * Os 5 Porques: lista ordenada. Aceita de 1 a 7 — cinco e a convencao, mas a
+ * cadeia para quando chega a uma causa que a organizacao consegue controlar.
+ */
+export const cincoPorquesSchema = z
+  .array(z.string().trim().min(3, 'Descreva o porque.').max(500))
+  .min(1, 'Registre ao menos um porque.')
+  .max(7);
+export type CincoPorques = z.output<typeof cincoPorquesSchema>;
+
+/** Quantas causas foram levantadas no Ishikawa, somando as seis categorias. */
+export function totalCausasIshikawa(ishikawa: Ishikawa | null | undefined): number {
+  if (!ishikawa) return 0;
+  return CATEGORIAS_ISHIKAWA.reduce((soma, categoria) => soma + (ishikawa[categoria]?.length ?? 0), 0);
+}
+
 const acidenteBaseSchema = z.object({
   clienteId: z.string({ required_error: 'Informe o cliente.' }).uuid('Cliente invalido.'),
   areaId: opcional(z.string().uuid('Area invalida.')),
@@ -55,6 +119,10 @@ const acidenteBaseSchema = z.object({
   causaRaiz: opcional(z.string().trim().max(1000)),
   fatoresContribuintes: opcional(z.string().trim().max(1000)),
   investigacaoConcluidaEm: opcional(dataOpcional('Conclusao da investigacao')),
+
+  /* --- Investigacao estruturada ------------------------------------------- */
+  ishikawa: ishikawaSchema.nullable().optional(),
+  cincoPorques: cincoPorquesSchema.nullable().optional(),
 });
 
 function validarAcidente(

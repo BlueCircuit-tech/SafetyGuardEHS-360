@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import type { Prisma } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import { z } from 'zod';
 import {
   ROTULO_INVESTIGACAO,
@@ -7,6 +7,8 @@ import {
   acidenteCreateSchema,
   acidenteUpdateSchema,
   problemasDoAcidente,
+  totalCausasIshikawa,
+  type Ishikawa,
   type SituacaoInvestigacao,
   type TipoAcidente,
 } from '@safetyguard/shared';
@@ -34,17 +36,68 @@ function catPendente(acidente: { catNumero: string | null; data: Date }): boolea
 }
 
 /**
+ * Campos Json? do Prisma nao aceitam `null` puro — exigem `Prisma.DbNull`.
+ * O schema compartilhado entrega `null` para "limpar"; aqui se traduz.
+ */
+function normalizarJson<T extends { ishikawa?: unknown; cincoPorques?: unknown }>(dados: T): T {
+  const saida: Record<string, unknown> = { ...dados };
+  for (const campo of ['ishikawa', 'cincoPorques'] as const) {
+    if (campo in saida && saida[campo] === null) saida[campo] = Prisma.DbNull;
+  }
+  return saida as T;
+}
+
+const filtroSchema = z.object({
+  clienteId: z.string().uuid().optional(),
+  areaId: z.string().uuid().optional(),
+  tipo: z.enum(['TIPICO', 'TRAJETO', 'DOENCA_OCUPACIONAL']).optional(),
+  situacaoInvestigacao: z.enum(['ABERTA', 'EM_INVESTIGACAO', 'CONCLUIDA']).optional(),
+  comAfastamento: z.coerce.boolean().optional(),
+  busca: z.string().trim().max(120).optional(),
+  de: z.coerce.date().optional(),
+  ate: z.coerce.date().optional(),
+});
+
+/** Inicio e fim (exclusivo) do dia civil da data informada. */
+function janelaDoDia(data: Date): { inicio: Date; fim: Date } {
+  const inicio = new Date(data.getFullYear(), data.getMonth(), data.getDate());
+  const fim = new Date(inicio.getTime() + MS_POR_DIA);
+  return { inicio, fim };
+}
+
+/**
  * Etapa 18 — Acidentes, CAT e Investigacao.
  * Registro sensivel como a gestao de consequencias: permissoes `planos:*`.
  */
 export async function registrarRotasAcidentes(app: FastifyInstance): Promise<void> {
   app.addHook('preHandler', guardaPorMetodo(app, { leitura: 'planos:ler', escrita: 'planos:escrever' }));
 
+  /** Historico pesquisavel: texto livre, periodo, tipo, area e situacao. */
   app.get('/acidentes', async (request) => {
-    const { clienteId } = z.object({ clienteId: z.string().uuid().optional() }).parse(request.query);
+    const filtro = filtroSchema.parse(request.query);
+
+    const where: Prisma.AcidenteWhereInput = {};
+    if (filtro.clienteId) where.clienteId = filtro.clienteId;
+    if (filtro.areaId) where.areaId = filtro.areaId;
+    if (filtro.tipo) where.tipo = filtro.tipo;
+    if (filtro.situacaoInvestigacao) where.situacaoInvestigacao = filtro.situacaoInvestigacao;
+    if (filtro.comAfastamento !== undefined) where.comAfastamento = filtro.comAfastamento;
+    if (filtro.de || filtro.ate) {
+      where.data = { ...(filtro.de ? { gte: filtro.de } : {}), ...(filtro.ate ? { lte: filtro.ate } : {}) };
+    }
+    if (filtro.busca) {
+      where.OR = [
+        { descricao: { contains: filtro.busca, mode: 'insensitive' } },
+        { causaRaiz: { contains: filtro.busca, mode: 'insensitive' } },
+        { parteCorpoAtingida: { contains: filtro.busca, mode: 'insensitive' } },
+        { catNumero: { contains: filtro.busca, mode: 'insensitive' } },
+        { colaborador: { nome: { contains: filtro.busca, mode: 'insensitive' } } },
+        { area: { nome: { contains: filtro.busca, mode: 'insensitive' } } },
+      ];
+    }
 
     const itens = await prisma.acidente.findMany({
-      where: clienteId ? { clienteId } : {},
+      where,
       orderBy: { data: 'desc' },
       take: 200,
       include: COM_VINCULOS,
@@ -53,11 +106,100 @@ export async function registrarRotasAcidentes(app: FastifyInstance): Promise<voi
     return itens.map((acidente) => ({
       ...acidente,
       catPendente: catPendente(acidente),
+      causasIshikawa: totalCausasIshikawa(acidente.ishikawa as Ishikawa | null),
       rotulos: {
         tipo: ROTULO_TIPO_ACIDENTE[acidente.tipo as TipoAcidente],
         investigacao: ROTULO_INVESTIGACAO[acidente.situacaoInvestigacao as SituacaoInvestigacao],
       },
     }));
+  });
+
+  /**
+   * Relatorio diario consolidado: tudo que aconteceu no dia, com evidencias.
+   *
+   * Reune acidentes, observacoes com foto, planos abertos e planos que
+   * venceram — e o material do fechamento do dia da consultoria. A data e
+   * interpretada no fuso do servidor (America/Sao_Paulo em producao).
+   */
+  app.get('/acidentes/relatorio-diario', async (request) => {
+    const { clienteId, data } = z
+      .object({ clienteId: z.string().uuid().optional(), data: z.coerce.date().default(() => new Date()) })
+      .parse(request.query);
+    const { inicio, fim } = janelaDoDia(data);
+    const porCliente = clienteId ? { clienteId } : {};
+
+    const cliente = clienteId
+      ? await prisma.cliente.findUnique({ where: { id: clienteId }, select: { id: true, nomeFantasia: true, razaoSocial: true } })
+      : null;
+
+    const [acidentes, observacoes, planosAbertos, planosVencidos] = await prisma.$transaction([
+      prisma.acidente.findMany({
+        where: { ...porCliente, data: { gte: inicio, lt: fim } },
+        orderBy: { data: 'asc' },
+        include: COM_VINCULOS,
+      }),
+      prisma.observacao.findMany({
+        where: { ...porCliente, dataHora: { gte: inicio, lt: fim }, tipo: { not: 'COMPORTAMENTO_SEGURO' } },
+        orderBy: { dataHora: 'asc' },
+        include: {
+          area: { select: { id: true, nome: true, codigo: true } },
+          terceiro: { select: { id: true, razaoSocial: true } },
+          causa: { select: { descricao: true } },
+        },
+      }),
+      prisma.planoAcao.findMany({
+        where: { ...porCliente, criadoEm: { gte: inicio, lt: fim } },
+        orderBy: { criadoEm: 'asc' },
+        select: {
+          id: true,
+          codigo: true,
+          acao: true,
+          criticidade: true,
+          prazo: true,
+          status: true,
+          responsavelNome: true,
+          area: { select: { nome: true } },
+        },
+      }),
+      prisma.planoAcao.findMany({
+        where: { ...porCliente, prazo: { gte: inicio, lt: fim }, status: { notIn: ['CONCLUIDO', 'CANCELADO'] } },
+        orderBy: { prazo: 'asc' },
+        select: {
+          id: true,
+          codigo: true,
+          acao: true,
+          criticidade: true,
+          prazo: true,
+          status: true,
+          responsavelNome: true,
+          area: { select: { nome: true } },
+        },
+      }),
+    ]);
+
+    return {
+      data: inicio,
+      cliente,
+      resumo: {
+        acidentes: acidentes.length,
+        acidentesComAfastamento: acidentes.filter((a) => a.comAfastamento).length,
+        desvios: observacoes.length,
+        desviosComFoto: observacoes.filter((o) => o.fotoUrl).length,
+        planosAbertos: planosAbertos.length,
+        planosVencidos: planosVencidos.length,
+      },
+      acidentes: acidentes.map((acidente) => ({
+        ...acidente,
+        catPendente: catPendente(acidente),
+        rotulos: {
+          tipo: ROTULO_TIPO_ACIDENTE[acidente.tipo as TipoAcidente],
+          investigacao: ROTULO_INVESTIGACAO[acidente.situacaoInvestigacao as SituacaoInvestigacao],
+        },
+      })),
+      desvios: observacoes,
+      planosAbertos,
+      planosVencidos,
+    };
   });
 
   app.get('/acidentes/resumo', async (request) => {
@@ -97,7 +239,7 @@ export async function registrarRotasAcidentes(app: FastifyInstance): Promise<voi
     if (!cliente) throw new NaoEncontrado('Cliente nao encontrado.', 'CLIENTE_NAO_ENCONTRADO');
 
     const acidente = await prisma.$transaction(async (tx) => {
-      const criado = await tx.acidente.create({ data: dados as Prisma.AcidenteUncheckedCreateInput });
+      const criado = await tx.acidente.create({ data: normalizarJson(dados) as Prisma.AcidenteUncheckedCreateInput });
       await registrarAuditoria(tx, {
         entidade: ENTIDADE,
         entidadeId: criado.id,
@@ -139,7 +281,7 @@ export async function registrarRotasAcidentes(app: FastifyInstance): Promise<voi
       const acidente = await tx.acidente.update({
         where: { id },
         data: {
-          ...(dados as Prisma.AcidenteUncheckedUpdateInput),
+          ...(normalizarJson(dados) as Prisma.AcidenteUncheckedUpdateInput),
           ...(concluindo ? { investigacaoConcluidaEm: new Date() } : {}),
         },
         include: COM_VINCULOS,

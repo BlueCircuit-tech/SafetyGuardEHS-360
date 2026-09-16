@@ -46,6 +46,7 @@ import {
   excluirDocumento,
   listarAuditoriaDocumento,
   listarDocumentos,
+  listarVersoesDocumento,
   obterDocumentoOuFalhar,
   revisarDocumento,
 } from './documento.service.js';
@@ -271,6 +272,12 @@ export async function registrarRotasSaude(app: FastifyInstance): Promise<void> {
   app.get('/documentos/:id/auditoria', async (request) => {
     const { id } = paramsSchema.parse(request.params);
     return listarAuditoriaDocumento(id);
+  });
+
+  /** Cadeia de versoes do documento, da primeira a vigente. */
+  app.get('/documentos/:id/versoes', async (request) => {
+    const { id } = paramsSchema.parse(request.params);
+    return listarVersoesDocumento(id);
   });
 
   app.post('/documentos', async (request, reply) => {

@@ -357,6 +357,10 @@ model Cliente {
   usuarios              Usuario[]
   afastamentos          Afastamento[]
   parametrosFinanceiros ParametrosFinanceiros?
+  ordensServico         OrdemServico[]
+  aprs                  Apr[]
+  modelosChecklist      ModeloChecklist[]
+  execucoesChecklist    ExecucaoChecklist[]
 
   @@unique([empresaId, cnpj])
   @@unique([empresaId, numeroContrato])
@@ -490,6 +494,7 @@ model Terceiro {
   planosDeAcao       PlanoAcao[]
   colaboradores      Colaborador[]
   documentos         DocumentoSsma[]
+  aprs               Apr[]
 
   @@unique([clienteId, cnpj])
   @@index([clienteId, situacao])
@@ -565,6 +570,8 @@ model Area {
   acidentes             Acidente[]
   inventarioRiscos      InventarioRisco[]
   ocorrenciasAmbientais OcorrenciaAmbiental[]
+  aprs                  Apr[]
+  execucoesChecklist    ExecucaoChecklist[]
 
   @@unique([clienteId, codigo])
   @@index([clienteId, situacao])
@@ -636,6 +643,12 @@ model Observacao {
   // --- Evidencias -------------------------------------------------------------
   fotoUrl       String?  @db.VarChar(300)
   assinaturaUrl String?  @db.VarChar(300)
+  /// Carimbo da assinatura: hash SHA-256 do arquivo + quem + quando. Sem o
+  /// carimbo a imagem e so uma foto; com ele, qualquer alteracao posterior
+  /// no arquivo ou nos dados e detectavel.
+  assinaturaHash String?   @db.VarChar(64)
+  assinaturaEm   DateTime?
+  assinaturaPor  String?   @db.VarChar(120)
   latitude      Decimal? @db.Decimal(10, 7)
   longitude     Decimal? @db.Decimal(10, 7)
 
@@ -942,6 +955,8 @@ model Colaborador {
   consequencias Consequencia[]
   acidentes     Acidente[]
   afastamentos  Afastamento[]
+  ordensServico OrdemServico[]
+  checklists    ExecucaoChecklist[]
 
   @@unique([clienteId, cpf])
   @@index([clienteId, situacao])
@@ -1026,11 +1041,22 @@ model DocumentoSsma {
   observacoes String?           @db.VarChar(1000)
   arquivoUrl  String?           @db.VarChar(300)
 
+  // --- Controle de versao ---------------------------------------------------
+  /// Uma nova versao e um registro NOVO que aponta para o anterior. O antigo
+  /// permanece intacto (situacao SUBSTITUIDO, vigente=false): a evidencia
+  /// continua exibida exatamente como foi emitida, e o historico e navegavel.
+  versao           Int            @default(1)
+  vigente          Boolean        @default(true)
+  versaoAnteriorId String?        @unique
+  versaoAnterior   DocumentoSsma? @relation("VersoesDocumento", fields: [versaoAnteriorId], references: [id], onDelete: SetNull)
+  versaoSeguinte   DocumentoSsma? @relation("VersoesDocumento")
+
   criadoEm     DateTime @default(now())
   atualizadoEm DateTime @updatedAt
 
   @@index([clienteId, situacao])
   @@index([clienteId, tipo])
+  @@index([clienteId, vigente])
   @@index([validade])
   @@map("documento_ssma")
 }
@@ -1426,6 +1452,15 @@ model Acidente {
   fatoresContribuintes    String?              @db.VarChar(1000)
   investigacaoConcluidaEm DateTime?            @db.Date
 
+  // --- Investigacao estruturada --------------------------------------------
+  /// Diagrama de Ishikawa (6M): { metodo, maquina, material, maoDeObra,
+  /// medida, meioAmbiente }, cada um uma lista de causas. Validado no schema
+  /// compartilhado; guardado como JSON porque a forma e fixa e nao e consultada
+  /// por coluna.
+  ishikawa     Json?
+  /// Os 5 Porques: lista ordenada de "por que?" ate a causa raiz.
+  cincoPorques Json?
+
   criadoEm     DateTime @default(now())
   atualizadoEm DateTime @updatedAt
 
@@ -1598,4 +1633,174 @@ model Afastamento {
   @@index([clienteId, dataInicio])
   @@index([colaboradorId, dataInicio])
   @@map("afastamento")
+}
+
+/**
+ * ==========================================================================
+ * Etapa 23 — Documentacao Tecnica: OS, APR e checklists de pre-uso
+ * ==========================================================================
+ */
+
+enum SituacaoOs {
+  EMITIDA
+  ASSINADA
+  SUBSTITUIDA
+}
+
+/// Ordem de Servico por funcao (NR-1, item 1.4.4): informa ao trabalhador os
+/// riscos da funcao e as medidas de prevencao.
+///
+/// E GERADA, nao digitada: o servidor consolida os riscos do inventario
+/// (por funcao e por area de lotacao), os EPIs entregues e os treinamentos
+/// exigidos para a funcao, e grava um SNAPSHOT. O snapshot importa porque a OS
+/// e prova do que o trabalhador foi informado NAQUELE momento — se o inventario
+/// mudar depois, a OS assinada nao muda junto; gera-se uma nova versao.
+model OrdemServico {
+  id            String      @id @default(uuid())
+  clienteId     String
+  cliente       Cliente     @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  colaboradorId String
+  colaborador   Colaborador @relation(fields: [colaboradorId], references: [id], onDelete: Cascade)
+
+  /// Identificador legivel (OS-0001).
+  codigo String @unique @db.VarChar(20)
+  versao Int    @default(1)
+
+  /// Copiados do colaborador no momento da geracao.
+  funcao    String          @db.VarChar(80)
+  setor     String?         @db.VarChar(80)
+  grauRisco GrauRiscoFuncao
+
+  /// Snapshot: [{ tipo, perigo, danosPossiveis, grauRisco, iir, controles, medidasPropostas }]
+  riscos              Json
+  /// Snapshot: [{ nome, ca, dataEntrega }]
+  episObrigatorios    Json
+  /// Snapshot: [{ nome, norma, situacao }] — exigidos pela matriz de capacitacao.
+  treinamentosExigidos Json
+  /// Texto livre complementar (procedimentos, restricoes).
+  medidasPreventivas  String? @db.VarChar(2000)
+
+  situacao SituacaoOs @default(EMITIDA)
+  geradaEm DateTime   @default(now())
+  geradaPor String    @db.VarChar(120)
+
+  // --- Ciencia do trabalhador (assinatura carimbada) ------------------------
+  cienciaEm            DateTime?
+  cienciaAssinaturaUrl String?   @db.VarChar(300)
+  cienciaHash          String?   @db.VarChar(64)
+
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  @@index([clienteId, situacao])
+  @@index([colaboradorId, versao])
+  @@map("ordem_servico")
+}
+
+enum SituacaoApr {
+  RASCUNHO
+  APROVADA
+  ENCERRADA
+}
+
+/// Analise Preliminar de Risco: a atividade decomposta em etapas, cada uma com
+/// perigos, riscos e medidas de controle.
+model Apr {
+  id         String    @id @default(uuid())
+  clienteId  String
+  cliente    Cliente   @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  areaId     String?
+  area       Area?     @relation(fields: [areaId], references: [id], onDelete: SetNull)
+  terceiroId String?
+  terceiro   Terceiro? @relation(fields: [terceiroId], references: [id], onDelete: SetNull)
+
+  /// Identificador legivel (APR-0001). Todas as versoes da mesma APR
+  /// compartilham o codigo; o que as distingue e a versao.
+  codigo String @db.VarChar(20)
+  versao Int    @default(1)
+
+  atividade   String    @db.VarChar(200)
+  local       String?   @db.VarChar(200)
+  dataInicio  DateTime  @db.Date
+  dataFim     DateTime? @db.Date
+  responsavel String    @db.VarChar(120)
+
+  /// [{ etapa, perigos, riscos, medidasControle, epis }]
+  etapas Json
+
+  situacao    SituacaoApr @default(RASCUNHO)
+  aprovadaPor String?     @db.VarChar(120)
+  aprovadaEm  DateTime?
+  /// Carimbo da aprovacao: hash do conteudo das etapas + aprovador + momento.
+  aprovacaoHash String?   @db.VarChar(64)
+
+  /// Digitalizacao da APR assinada em campo, quando houver.
+  arquivoUrl String? @db.VarChar(300)
+
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  @@unique([codigo, versao])
+  @@index([clienteId, situacao])
+  @@index([areaId, dataInicio])
+  @@map("apr")
+}
+
+enum ResultadoChecklist {
+  APTO
+  NAO_APTO
+}
+
+/// Modelo de checklist de pre-uso: a lista de itens a verificar em um tipo de
+/// equipamento antes de opera-lo.
+model ModeloChecklist {
+  id        String  @id @default(uuid())
+  clienteId String
+  cliente   Cliente @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+
+  nome            String  @db.VarChar(120)
+  tipoEquipamento String  @db.VarChar(80)
+  /// [{ descricao, impeditivo }] — impeditivo=true: nao conforme reprova o equipamento.
+  itens           Json
+  ativo           Boolean @default(true)
+
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  execucoes ExecucaoChecklist[]
+
+  @@index([clienteId, ativo])
+  @@map("modelo_checklist")
+}
+
+/// Execucao de um checklist antes do uso: quem verificou o que, com foto.
+model ExecucaoChecklist {
+  id            String          @id @default(uuid())
+  clienteId     String
+  cliente       Cliente         @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  modeloId      String
+  modelo        ModeloChecklist @relation(fields: [modeloId], references: [id], onDelete: Restrict)
+  areaId        String?
+  area          Area?           @relation(fields: [areaId], references: [id], onDelete: SetNull)
+  colaboradorId String?
+  colaborador   Colaborador?    @relation(fields: [colaboradorId], references: [id], onDelete: SetNull)
+
+  equipamentoIdentificacao String   @db.VarChar(120)
+  dataHora                 DateTime @default(now())
+  executadoPor             String   @db.VarChar(120)
+
+  /// [{ descricao, impeditivo, conforme, observacao }] — copia dos itens do
+  /// modelo com a resposta, para que a execucao sobreviva a edicao do modelo.
+  respostas Json
+  /// Derivado das respostas: qualquer impeditivo nao conforme reprova.
+  resultado ResultadoChecklist
+  fotoUrl   String?            @db.VarChar(300)
+  /// Carimbo: hash das respostas + executor + momento.
+  hash      String?            @db.VarChar(64)
+
+  criadoEm DateTime @default(now())
+
+  @@index([clienteId, dataHora])
+  @@index([modeloId, dataHora])
+  @@map("execucao_checklist")
 }
