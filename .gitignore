@@ -13,3 +13,6 @@ apps/api/prisma/.migrate/
 .idea/
 .vscode/*
 !.vscode/extensions.json
+
+# CLI do Supabase (estado local)
+supabase/.temp/
