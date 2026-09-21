@@ -70,7 +70,8 @@ export async function registrarNotificacoes(
   db: ClientePrisma,
   contexto: ContextoNotificacao,
 ): Promise<ResultadoRegistro> {
-  const empresa = await obterEmpresaOuFalhar();
+  // Pelo cliente da transacao — com o global seria uma segunda conexao (deadlock com pool de 1).
+  const empresa = await obterEmpresaOuFalhar(db);
   const cabecalho = montarCabecalhoInstitucional(empresa);
   const agora = new Date();
 

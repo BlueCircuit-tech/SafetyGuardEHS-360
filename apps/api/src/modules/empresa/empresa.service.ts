@@ -1,4 +1,4 @@
-import type { EmpresaConsultoria } from '@prisma/client';
+import type { EmpresaConsultoria, Prisma, PrismaClient } from '@prisma/client';
 import {
   montarCabecalhoInstitucional,
   type CabecalhoInstitucional,
@@ -10,13 +10,22 @@ import { calcularDiferenca, registrarAuditoria, type ContextoAuditoria } from '.
 
 const ENTIDADE = 'EmpresaConsultoria';
 
-/** Retorna a matriz cadastrada, ou `null` quando a Etapa 1 ainda nao foi concluida. */
-export async function obterEmpresa(): Promise<EmpresaConsultoria | null> {
-  return prisma.empresaConsultoria.findFirst();
+type ClientePrisma = PrismaClient | Prisma.TransactionClient;
+
+/**
+ * Retorna a matriz cadastrada, ou `null` quando a Etapa 1 ainda nao foi concluida.
+ *
+ * Aceita o cliente da transacao: chamada de dentro de um `$transaction` com o
+ * `prisma` global pede uma SEGUNDA conexao do pool. Em producao o pool tem
+ * uma so (connection_limit=1 no pooler), entao a consulta espera a transacao
+ * liberar — e a transacao espera a consulta. Deadlock ate o timeout de 5 s.
+ */
+export async function obterEmpresa(db: ClientePrisma = prisma): Promise<EmpresaConsultoria | null> {
+  return db.empresaConsultoria.findFirst();
 }
 
-export async function obterEmpresaOuFalhar(): Promise<EmpresaConsultoria> {
-  const empresa = await obterEmpresa();
+export async function obterEmpresaOuFalhar(db: ClientePrisma = prisma): Promise<EmpresaConsultoria> {
+  const empresa = await obterEmpresa(db);
   if (!empresa) {
     throw new NaoEncontrado(
       'Empresa de consultoria ainda nao cadastrada. Conclua a Etapa 1 do cadastro.',

@@ -42,7 +42,11 @@ jobs:
           --health-retries 10
 
     env:
-      DATABASE_URL: postgresql://safetyguard:safetyguard@localhost:5432/safetyguard?schema=public
+      # connection_limit=1 reproduz a producao (pooler do Supabase na Vercel):
+      # uma consulta com o prisma global dentro de $transaction vira deadlock
+      # ate o timeout — foi assim que o cron quebrou em producao sem quebrar
+      # localmente. O CI precisa sentir o mesmo.
+      DATABASE_URL: postgresql://safetyguard:safetyguard@localhost:5432/safetyguard?schema=public&connection_limit=1
       JWT_SECRET: ci-jwt-secret-nao-usado-em-producao
       CORS_ORIGIN: http://localhost:5173
 
