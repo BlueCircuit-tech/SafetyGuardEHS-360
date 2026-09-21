@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 
 /**
@@ -195,6 +195,41 @@ describe.skipIf(!temBanco)('API (integracao)', () => {
     });
     expect(aprovado.json().resultado).toBe('APTO');
   });
+
+  it('e-mail lento nao estoura a transacao do escalonamento (envio fica fora dela)', async () => {
+    // Simula um SMTP real: 1,5 s por mensagem. Se o envio estivesse dentro da
+    // transacao (limite 5 s), tres planos escalonados ja bastariam para
+    // "Transaction already closed" — o erro visto em producao.
+    const email = await import('../src/lib/email.js');
+    const original = email.enviarEmail;
+    const lento = vi.spyOn(email, 'enviarEmail').mockImplementation(async () => {
+      await new Promise((r) => setTimeout(r, 1500));
+      return true;
+    });
+
+    // Tres planos vencidos e nunca escalonados, para forcar tres envios.
+    const vencidos = await prisma.planoAcao.findMany({
+      where: { status: 'ABERTO', prazo: { lt: new Date() }, observacaoId: { not: null } },
+      take: 3,
+      select: { id: true, nivelEscalonamento: true },
+    });
+    const antes = new Map(vencidos.map((p) => [p.id, p.nivelEscalonamento]));
+    await prisma.planoAcao.updateMany({ where: { id: { in: vencidos.map((p) => p.id) } }, data: { nivelEscalonamento: 0 } });
+    criados.push(async () => {
+      for (const [id, nivel] of antes) await prisma.planoAcao.update({ where: { id }, data: { nivelEscalonamento: nivel } });
+    });
+
+    try {
+      const r = await app.inject({ method: 'GET', url: '/api/v1/cron/escalonar', headers: { authorization: `Bearer ${CRON}` } });
+      expect(r.statusCode).toBe(200);
+      expect(r.json().escalonados.length).toBeGreaterThanOrEqual(Math.min(3, vencidos.length));
+      expect(r.json().emails.falhas).toBe(0);
+      if (vencidos.length > 0) expect(lento).toHaveBeenCalled();
+    } finally {
+      lento.mockRestore();
+      expect(email.enviarEmail).toBe(original);
+    }
+  }, 30_000);
 
   it('cron de escalonamento exige o segredo e e idempotente', async () => {
     const sem = await app.inject({ method: 'GET', url: '/api/v1/cron/escalonar' });

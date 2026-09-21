@@ -54,10 +54,22 @@ export interface ContextoNotificacao {
  * definidos pela matriz. WhatsApp opcional gera registro (para o gestor decidir
  * enviar); WhatsApp `NAO` nao gera.
  */
+export interface ResultadoRegistro {
+  canais: CanalNotificacao[];
+  agrupada: boolean;
+  /**
+   * Notificacoes de e-mail gravadas nesta chamada. O envio NAO acontece aqui:
+   * esta funcao roda dentro de uma transacao com limite de 5 s, e um SMTP real
+   * leva 1-3 s por mensagem. Quem chamou faz o commit e depois passa estes
+   * ids a `despacharEmails`.
+   */
+  emailIds: string[];
+}
+
 export async function registrarNotificacoes(
   db: ClientePrisma,
   contexto: ContextoNotificacao,
-): Promise<{ canais: CanalNotificacao[]; agrupada: boolean }> {
+): Promise<ResultadoRegistro> {
   const empresa = await obterEmpresaOuFalhar();
   const cabecalho = montarCabecalhoInstitucional(empresa);
   const agora = new Date();
@@ -123,6 +135,7 @@ export async function registrarNotificacoes(
 
   // Horario comercial: fora de 07:00-18:00/seg-sex, Risco I soma o canal de voz.
   const canais = canaisDoDisparo(contexto.regra, agora) as CanalNotificacao[];
+  const emailIds: string[] = [];
 
   for (const canal of canais) {
     const corpo =
@@ -142,74 +155,66 @@ export async function registrarNotificacoes(
     });
 
     if (canal === 'EMAIL' && mensagens.emailAssunto && mensagens.emailCorpo) {
-      const destinatariosEmail = resolverDestinatariosEmail(
-        contexto.regra.destinatarios,
-        contexto,
-      );
-      if (destinatariosEmail.length > 0) {
-        try {
-          const enviado = await enviarEmail({
-            para: destinatariosEmail,
-            assunto: mensagens.emailAssunto,
-            corpo: mensagens.emailCorpo,
-          });
-          // Mesmo cliente da transacao: o registro ainda nao esta commitado,
-          // e o `prisma` global nao o enxergaria (P2025).
-          if (enviado) {
-            await db.notificacao.update({
-              where: { id: notificacao.id },
-              data: { status: 'ENVIADA' },
-            });
-          }
-        } catch {
-          await db.notificacao.update({
-            where: { id: notificacao.id },
-            data: { status: 'FALHOU' },
-          });
-        }
-      }
+      emailIds.push(notificacao.id);
     }
   }
 
-  return { canais, agrupada };
+  return { canais, agrupada, emailIds };
 }
 
 /* -------------------------------------------------------------------------- */
-/* Resolução de destinatários de e-mail                                       */
+/* Despacho de e-mail — fora da transacao                                     */
 /* -------------------------------------------------------------------------- */
 
 /**
- * Monta a lista de e-mails reais para o canal EMAIL.
+ * Envia as notificacoes de e-mail ja commitadas e marca ENVIADA ou FALHOU.
  *
- * Estratégia (em ordem):
- * 1. E-mail do responsável pelo plano de ação (se houver)
- * 2. E-mail de cópia de monitoramento configurado em ALERTA_EMAIL_COPIA
+ * Recebe ids explicitos, nunca "tudo que esta SIMULADA": a massa de
+ * demonstracao e o historico antigo tambem estao SIMULADA, e um despacho
+ * generico dispararia centenas de mensagens de uma vez.
  *
- * Os `destinatarios` da regra são nomes de papel (GESTOR_SST, DIRETOR…), não
- * e-mails. O mapeamento de papel→e-mail exigiria uma agenda de contatos que
- * ainda não existe. Por ora, o responsável do plano e o e-mail de cópia
- * garantem que o alerta chegue.
+ * Destinatarios: o responsavel do plano (quando ha e-mail cadastrado) e a
+ * copia de monitoramento (ALERTA_EMAIL_COPIA). Os papeis da matriz
+ * (SUPERVISOR, GERENTE...) ficam gravados em `destinatarios` para auditoria,
+ * mas o mapeamento papel -> pessoa exige uma agenda que ainda nao existe.
+ *
+ * Nunca lanca: falha de envio vira status FALHOU e o chamador segue.
  */
-function resolverDestinatariosEmail(
-  _papeis: string[],
-  contexto: ContextoNotificacao,
-): string[] {
-  const enderecos = new Set<string>();
+export async function despacharEmails(ids: string[]): Promise<{ enviadas: number; falhas: number }> {
+  if (ids.length === 0) return { enviadas: 0, falhas: 0 };
 
-  // Responsável registrado no plano de ação ou na observação
-  if (contexto.regra && 'responsavelEmail' in contexto) {
-    const re = (contexto as { responsavelEmail?: string }).responsavelEmail;
-    if (re) enderecos.add(re);
-  }
+  const pendentes = await prisma.notificacao.findMany({
+    where: { id: { in: ids }, canal: 'EMAIL', status: 'SIMULADA' },
+    select: {
+      id: true,
+      assunto: true,
+      corpo: true,
+      planoAcao: { select: { responsavelEmail: true } },
+    },
+  });
 
-  // Cópia de monitoramento (ex.: gestor da consultoria)
-  if (env.ALERTA_EMAIL_COPIA) {
-    for (const email of env.ALERTA_EMAIL_COPIA.split(',').map((e) => e.trim())) {
-      if (email) enderecos.add(email);
+  let enviadas = 0;
+  let falhas = 0;
+
+  for (const n of pendentes) {
+    const para = new Set<string>();
+    if (n.planoAcao?.responsavelEmail) para.add(n.planoAcao.responsavelEmail);
+    for (const email of (env.ALERTA_EMAIL_COPIA ?? '').split(',').map((e) => e.trim())) {
+      if (email) para.add(email);
+    }
+    if (para.size === 0 || !n.assunto || !n.corpo) continue;
+
+    try {
+      await enviarEmail({ para: [...para], assunto: n.assunto, corpo: n.corpo });
+      await prisma.notificacao.update({ where: { id: n.id }, data: { status: 'ENVIADA' } });
+      enviadas += 1;
+    } catch {
+      await prisma.notificacao.update({ where: { id: n.id }, data: { status: 'FALHOU' } }).catch(() => {});
+      falhas += 1;
     }
   }
 
-  return [...enderecos];
+  return { enviadas, falhas };
 }
 
 /* -------------------------------------------------------------------------- */

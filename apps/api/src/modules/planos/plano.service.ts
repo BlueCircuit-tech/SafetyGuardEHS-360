@@ -19,7 +19,7 @@ import { Conflito, NaoEncontrado, RequisicaoInvalida } from '../../lib/erros.js'
 import { calcularDiferenca, registrarAuditoria, type ContextoAuditoria } from '../../lib/auditoria.js';
 import { obterEmpresaOuFalhar } from '../empresa/empresa.service.js';
 import { comunicacaoDaObservacao } from '../observacoes/observacao.service.js';
-import { registrarNotificacoes } from './notificacao.service.js';
+import { despacharEmails, registrarNotificacoes } from './notificacao.service.js';
 
 const ENTIDADE = 'PlanoAcao';
 const MS_POR_HORA = 60 * 60 * 1000;
@@ -272,12 +272,17 @@ interface DadosCriacao extends PlanoAcaoCreateData {
   clienteId: string;
 }
 
+/**
+ * `notificar` grava as notificacoes dentro da transacao e devolve os ids de
+ * e-mail; o envio acontece depois do commit, fora do limite de 5 s da
+ * transacao — um SMTP real leva segundos por mensagem.
+ */
 async function criarComNotificacao(
   dados: DadosCriacao,
   contexto: ContextoAuditoria,
-  notificar?: (tx: Prisma.TransactionClient, plano: PlanoAcao) => Promise<void>,
+  notificar?: (tx: Prisma.TransactionClient, plano: PlanoAcao) => Promise<string[]>,
 ): Promise<PlanoAcao> {
-  return prisma.$transaction(async (tx) => {
+  const { plano, emailIds } = await prisma.$transaction(async (tx) => {
     const codigo = await proximoCodigo(tx);
     const plano = await tx.planoAcao.create({
       data: { ...dados, codigo } as Prisma.PlanoAcaoUncheckedCreateInput,
@@ -292,10 +297,12 @@ async function criarComNotificacao(
       contexto,
     });
 
-    if (notificar) await notificar(tx, plano);
-
-    return plano;
+    const emailIds = notificar ? await notificar(tx, plano) : [];
+    return { plano, emailIds };
   });
+
+  await despacharEmails(emailIds);
+  return plano;
 }
 
 export async function criarPlano(dados: PlanoAcaoCreateData, contexto: ContextoAuditoria = {}): Promise<PlanoAcao> {
@@ -400,9 +407,9 @@ export async function abrirPlanoDaObservacao(
   };
 
   return criarComNotificacao(dados as unknown as DadosCriacao, contexto, async (tx, plano) => {
-    if (!regra) return;
+    if (!regra) return [];
 
-    await registrarNotificacoes(tx, {
+    const { emailIds } = await registrarNotificacoes(tx, {
       clienteId: observacao.clienteId,
       planoAcaoId: plano.id,
       observacaoId,
@@ -422,6 +429,7 @@ export async function abrirPlanoDaObservacao(
       areaId: observacao.areaId,
       tipoObservacao: observacao.tipo,
     });
+    return emailIds;
   });
 }
 
@@ -502,6 +510,8 @@ export async function definirEvidencia(
 export interface ResultadoEscalonamento {
   avaliados: number;
   escalonados: Array<{ id: string; codigo: string; de: number; para: number; nivel: string }>;
+  /** E-mails despachados depois do commit — o agendador loga isto. */
+  emails: { enviadas: number; falhas: number };
 }
 
 /**
@@ -532,6 +542,8 @@ export async function processarEscalonamentos(contexto: ContextoAuditoria = {}):
   });
 
   const escalonados: ResultadoEscalonamento['escalonados'] = [];
+  // E-mails sao despachados depois, fora das transacoes (limite de 5 s cada).
+  const emailIds: string[] = [];
 
   for (const plano of vencidos) {
     // Escada da classificacao de origem: A-MAJOR escala em 2h, C-MINOR em 24h.
@@ -569,7 +581,7 @@ export async function processarEscalonamentos(contexto: ContextoAuditoria = {}):
       });
 
       if (regra) {
-        await registrarNotificacoes(tx, {
+        const registro = await registrarNotificacoes(tx, {
           clienteId: plano.clienteId,
           planoAcaoId: plano.id,
           observacaoId: plano.observacaoId,
@@ -591,6 +603,7 @@ export async function processarEscalonamentos(contexto: ContextoAuditoria = {}):
           areaId: plano.areaId,
           tipoObservacao: plano.observacao?.tipo ?? null,
         });
+        emailIds.push(...registro.emailIds);
       }
     });
 
@@ -603,7 +616,9 @@ export async function processarEscalonamentos(contexto: ContextoAuditoria = {}):
     });
   }
 
-  return { avaliados: vencidos.length, escalonados };
+  const emails = await despacharEmails(emailIds);
+
+  return { avaliados: vencidos.length, escalonados, emails };
 }
 
 export async function listarAuditoriaPlano(id: string, limite = 50) {

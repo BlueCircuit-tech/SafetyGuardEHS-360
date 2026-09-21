@@ -16,7 +16,7 @@ import { NaoEncontrado } from '../../lib/erros.js';
 import { calcularDiferenca, registrarAuditoria } from '../../lib/auditoria.js';
 import { contextoDeAuditoria } from '../../lib/autenticacao.js';
 import { guardaPorMetodo } from '../../lib/guarda.js';
-import { registrarNotificacoes } from '../planos/notificacao.service.js';
+import { despacharEmails, registrarNotificacoes } from '../planos/notificacao.service.js';
 
 const ENTIDADE = 'OcorrenciaAmbiental';
 const paramsSchema = z.object({ id: z.string().uuid('Identificador invalido.') });
@@ -106,6 +106,7 @@ export async function registrarRotasMeioAmbiente(app: FastifyInstance): Promise<
       ? await prisma.area.findUnique({ where: { id: dados.areaId }, select: { nome: true, pontoReferencia: true } })
       : null;
 
+    let emailIds: string[] = [];
     const ocorrencia = await prisma.$transaction(async (tx) => {
       const criada = await tx.ocorrenciaAmbiental.create({
         data: dados as Prisma.OcorrenciaAmbientalUncheckedCreateInput,
@@ -126,7 +127,7 @@ export async function registrarRotasMeioAmbiente(app: FastifyInstance): Promise<
        */
       if (dados.grauRisco === 'I') {
         const regra = planoDeComunicacao('OCORRENCIA_AMBIENTAL', dados.grauRisco as GrauRiscoOcorrencia);
-        await registrarNotificacoes(tx, {
+        const registro = await registrarNotificacoes(tx, {
           clienteId: dados.clienteId,
           cliente: cliente.nomeFantasia,
           area: area?.nome ?? '—',
@@ -139,10 +140,14 @@ export async function registrarRotasMeioAmbiente(app: FastifyInstance): Promise<
           dataHora: dados.data,
           regra,
         });
+        emailIds = registro.emailIds;
       }
 
       return criada;
     });
+
+    // Fora da transacao: SMTP real leva segundos e o limite dela e 5 s.
+    await despacharEmails(emailIds);
 
     return reply.status(201).send(ocorrencia);
   });
