@@ -511,7 +511,7 @@ export interface ResultadoEscalonamento {
   avaliados: number;
   escalonados: Array<{ id: string; codigo: string; de: number; para: number; nivel: string }>;
   /** E-mails despachados depois do commit — o agendador loga isto. */
-  emails: { enviadas: number; falhas: number };
+  emails: { enviadas: number; falhas: number; motivos?: string[] };
 }
 
 /**

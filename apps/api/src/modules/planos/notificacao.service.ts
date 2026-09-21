@@ -181,8 +181,9 @@ export async function registrarNotificacoes(
  *
  * Nunca lanca: falha de envio vira status FALHOU e o chamador segue.
  */
-export async function despacharEmails(ids: string[]): Promise<{ enviadas: number; falhas: number }> {
+export async function despacharEmails(ids: string[]): Promise<{ enviadas: number; falhas: number; motivos?: string[] }> {
   if (ids.length === 0) return { enviadas: 0, falhas: 0 };
+  const motivos: string[] = [];
 
   const pendentes = await prisma.notificacao.findMany({
     where: { id: { in: ids }, canal: 'EMAIL', status: 'SIMULADA' },
@@ -209,13 +210,18 @@ export async function despacharEmails(ids: string[]): Promise<{ enviadas: number
       await enviarEmail({ para: [...para], assunto: n.assunto, corpo: n.corpo });
       await prisma.notificacao.update({ where: { id: n.id }, data: { status: 'ENVIADA' } });
       enviadas += 1;
-    } catch {
+    } catch (erro) {
+      // O motivo vai para o log e para a resposta: sem isso, "falhou" nao diz
+      // se foi credencial, rede ou remetente nao verificado.
+      const motivo = erro instanceof Error ? erro.message : String(erro);
+      console.error(`[email] falha ao enviar notificacao ${n.id}: ${motivo}`);
+      motivos.push(motivo.slice(0, 200));
       await prisma.notificacao.update({ where: { id: n.id }, data: { status: 'FALHOU' } }).catch(() => {});
       falhas += 1;
     }
   }
 
-  return { enviadas, falhas };
+  return { enviadas, falhas, ...(motivos.length ? { motivos: [...new Set(motivos)] } : {}) };
 }
 
 /* -------------------------------------------------------------------------- */
