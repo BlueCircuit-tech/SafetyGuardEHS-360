@@ -51,6 +51,7 @@ O `.env` local **não sobe** — está no `.gitignore`, e é assim que deve ser.
 | `NODE_ENV` | `production` |
 | `SUPABASE_URL` | `https://<ref>.supabase.co` |
 | `SUPABASE_SERVICE_ROLE_KEY` | chave `service_role` |
+| `CRON_SECRET` | segredo aleatório (≥16 chars). A Vercel o envia no header do cron; sem ele o escalonamento automático fica desligado |
 | `SMTP_HOST` | `smtp-relay.brevo.com` |
 | `SMTP_PORT` | `587` |
 | `SMTP_USER` | usuário do Brevo |
@@ -116,6 +117,30 @@ Vai além e toca o banco: `{"status":"ok","banco":"ok"}` confirma que a
 Depois disso, abra o front e faça login.
 
 ---
+
+## 4b. Escalonamento automático (cron)
+
+A matriz de comunicação só vale se alguém rodar o escalonamento. O
+`apps/api/vercel.json` agenda `GET /api/v1/cron/escalonar` **a cada hora**; a
+Vercel chama a rota com `Authorization: Bearer <CRON_SECRET>`. A rota compara
+o segredo em tempo constante e recusa tudo o mais.
+
+Para conferir que está rodando: Vercel → projeto da API → **Cron Jobs** mostra
+o histórico de execuções. O retorno de cada uma diz quantos planos foram
+avaliados e quantos escalaram.
+
+Cron horário exige plano **Pro** da Vercel; no Hobby o limite é diário e o
+deploy recusa o `schedule`. Se isso acontecer, troque para `0 8 * * *` até
+fazer o upgrade.
+
+## 4c. CI
+
+`.github/workflows/ci.yml` roda em todo push e PR: build dos três pacotes,
+typecheck, testes de unidade e testes de integração contra um Postgres de
+serviço (migrations + seed). Como a Vercel publica a `main` sozinha, o CI
+sozinho não bloqueia um deploy quebrado — para isso, em GitHub → Settings →
+Branches, proteja a `main` com **Require status checks** apontando para o job
+`Typecheck, build e testes`.
 
 ## 5. Banco de dados
 

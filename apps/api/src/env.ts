@@ -37,6 +37,12 @@ const envSchema = z.object({
   // Supabase — Storage e autenticação server-side
   SUPABASE_URL: z.string().url().optional(),
   SUPABASE_SERVICE_ROLE_KEY: z.string().optional(),
+
+  /**
+   * Segredo que o agendador (Vercel Cron) envia em `Authorization: Bearer`.
+   * Sem ele configurado, a rota de cron fica desligada — nunca aberta.
+   */
+  CRON_SECRET: z.string().min(16).optional(),
 });
 
 const resultado = envSchema.safeParse(process.env);

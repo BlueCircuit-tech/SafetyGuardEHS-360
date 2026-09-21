@@ -1,0 +1,73 @@
+# CI do SafetyGuard EHS 360.
+#
+# Roda em todo push e pull request. A Vercel publica a `main` sozinha, entao
+# este workflow e a unica barreira entre um commit e a producao: se ele
+# falhar, o deploy ja aconteceu — por isso "Require status checks" na
+# protecao da branch e o complemento natural (ver docs/deploy-vercel.md).
+#
+# Tres blocos, do mais barato ao mais caro:
+#   1. typecheck + build         — pega erro de tipo e de import nos tres pacotes
+#   2. testes de unidade         — regras compartilhadas (formulas, matriz)
+#   3. testes de integracao      — API contra Postgres real, com migrations e seed
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verificar:
+    name: Typecheck, build e testes
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: safetyguard
+          POSTGRES_PASSWORD: safetyguard
+          POSTGRES_DB: safetyguard
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U safetyguard -d safetyguard"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgresql://safetyguard:safetyguard@localhost:5432/safetyguard?schema=public
+      JWT_SECRET: ci-jwt-secret-nao-usado-em-producao
+      CORS_ORIGIN: http://localhost:5173
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      - name: Build (shared -> api -> web)
+        run: npm run build
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Migrations e seed no Postgres de teste
+        working-directory: apps/api
+        run: |
+          npx prisma migrate deploy
+          npx tsx prisma/seed.ts
+
+      - name: Testes (unidade + integracao)
+        run: npm test

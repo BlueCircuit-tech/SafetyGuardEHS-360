@@ -153,14 +153,16 @@ export async function registrarNotificacoes(
             assunto: mensagens.emailAssunto,
             corpo: mensagens.emailCorpo,
           });
+          // Mesmo cliente da transacao: o registro ainda nao esta commitado,
+          // e o `prisma` global nao o enxergaria (P2025).
           if (enviado) {
-            await prisma.notificacao.update({
+            await db.notificacao.update({
               where: { id: notificacao.id },
               data: { status: 'ENVIADA' },
             });
           }
         } catch {
-          await prisma.notificacao.update({
+          await db.notificacao.update({
             where: { id: notificacao.id },
             data: { status: 'FALHOU' },
           });

@@ -1,3 +1,4 @@
+import { timingSafeEqual } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import type { PlanoAcao } from '@prisma/client';
 import { z } from 'zod';
@@ -37,7 +38,7 @@ import { MIMES_IMAGEM_ACEITOS, removerArquivoPublico, salvarImagem } from '../..
 import { RequisicaoInvalida } from '../../lib/erros.js';
 import { contextoDeAuditoria } from '../../lib/autenticacao.js';
 import { guardaPorMetodo } from '../../lib/guarda.js';
-import { uploadMaxBytes } from '../../env.js';
+import { env, uploadMaxBytes } from '../../env.js';
 
 const paramsSchema = z.object({ id: z.string().uuid('Identificador de plano invalido.') });
 
@@ -89,8 +90,32 @@ export async function rotasPlanos(app: FastifyInstance): Promise<void> {
       '/api/v1/planos-acao/escalonar': 'planos:escalonar',
       '/api/v1/notificacoes': 'planos:ler',
       '/api/v1/notificacoes/resumo': 'planos:ler',
+      // Autenticada pelo segredo do agendador, nao por sessao de usuario.
+      '/api/v1/cron/escalonar': null,
     },
   }));
+
+  /**
+   * Ponto de entrada do agendador (Vercel Cron, a cada hora). E o que faz a
+   * matriz de comunicacao valer sem ninguem clicar: sem isto, um plano
+   * vencido so escalaria quando alguem abrisse a tela e apertasse o botao.
+   *
+   * Autenticacao: `Authorization: Bearer <CRON_SECRET>` — o mesmo que a Vercel
+   * injeta automaticamente quando a variavel existe no projeto. Sem a variavel
+   * configurada a rota responde 503, nunca executa sem segredo.
+   */
+  app.get('/cron/escalonar', async (request, reply) => {
+    if (!env.CRON_SECRET) {
+      return reply.status(503).send({ erro: { codigo: 'CRON_DESLIGADO', mensagem: 'CRON_SECRET nao configurado.' } });
+    }
+    const informado = (request.headers.authorization ?? '').replace(/^Bearer\s+/i, '');
+    if (informado.length !== env.CRON_SECRET.length || !timingSafeEqual(Buffer.from(informado), Buffer.from(env.CRON_SECRET))) {
+      return reply.status(401).send({ erro: { codigo: 'CRON_NAO_AUTORIZADO', mensagem: 'Segredo invalido.' } });
+    }
+    const resultado = await processarEscalonamentos({ autor: 'agendador', ip: request.ip });
+    request.log.info({ resultado }, 'escalonamento automatico executado');
+    return { executadoEm: new Date(), ...resultado };
+  });
 
   /* ------------------------------------------------------------ painel --- */
 
