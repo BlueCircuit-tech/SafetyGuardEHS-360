@@ -121,17 +121,24 @@ Depois disso, abra o front e faça login.
 ## 4b. Escalonamento automático (cron)
 
 A matriz de comunicação só vale se alguém rodar o escalonamento. O
-`apps/api/vercel.json` agenda `GET /api/v1/cron/escalonar` **a cada hora**; a
-Vercel chama a rota com `Authorization: Bearer <CRON_SECRET>`. A rota compara
-o segredo em tempo constante e recusa tudo o mais.
+`apps/api/vercel.json` agenda `GET /api/v1/cron/escalonar`; a Vercel chama a
+rota com `Authorization: Bearer <CRON_SECRET>`. A rota compara o segredo em
+tempo constante e recusa tudo o mais.
+
+**Hoje o agendamento é diário, às 08:00 de Brasília (`0 11 * * *` em UTC).**
+O plano Hobby da Vercel só permite um cron por dia — a configuração horária
+faz o deploy inteiro ser recusado, inclusive os automáticos por push. Com o
+plano Pro da Vercel, troque para `0 * * * *` e a matriz passa a valer de hora
+em hora, como ela pede.
+
+Isso importa para as escadas curtas: um A-MAJOR escala para o coordenador em
+2 horas pela matriz, mas com cron diário só escala no dia seguinte. Até o
+upgrade, o botão **Rodar escalonamento** na tela de planos continua sendo o
+caminho para escalar na hora.
 
 Para conferir que está rodando: Vercel → projeto da API → **Cron Jobs** mostra
 o histórico de execuções. O retorno de cada uma diz quantos planos foram
 avaliados e quantos escalaram.
-
-Cron horário exige plano **Pro** da Vercel; no Hobby o limite é diário e o
-deploy recusa o `schedule`. Se isso acontecer, troque para `0 8 * * *` até
-fazer o upgrade.
 
 ## 4c. CI
 
