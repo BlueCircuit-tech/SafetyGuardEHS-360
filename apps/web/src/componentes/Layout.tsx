@@ -1,129 +1,137 @@
-import { NavLink, Outlet, useLocation } from 'react-router-dom';
-import { Icone, type NomeIcone } from './Icone';
+import { useEffect, useRef, useState, type CSSProperties } from 'react';
+import { Link, NavLink, Outlet, useLocation } from 'react-router-dom';
+import { Icone } from './Icone';
 import { Marca } from './Marca';
-import { APP_NOME, type Permissao } from '@safetyguard/shared';
+import { useNavegacaoVisivel } from './MapaNavegacao';
+import { APP_NOME } from '@safetyguard/shared';
 import { useSessao } from '../lib/sessao';
+import { api } from '../lib/api';
+import { BARRA, tituloDaRota } from '../lib/navegacao';
 
-interface ItemNav {
-  titulo: string;
-  descricao: string;
-  rota: string;
-  icone: NomeIcone;
-  permissao?: Permissao;
+/**
+ * Casca da aplicação.
+ *
+ * Barra lateral enxuta com sete entradas; "Módulos" abre um painel lateral
+ * com todas as telas agrupadas nos nove temas, para que nenhuma fique a mais
+ * de dois cliques. A topbar mostra o tema da tela atual, na cor do tema.
+ */
+
+const INTERVALO_NOTIFICACOES_MS = 5 * 60 * 1000;
+
+function useContadorNotificacoes() {
+  const { usuario, pode } = useSessao();
+  const [criticas, setCriticas] = useState(0);
+  const autorizado = Boolean(usuario) && pode('planos:ler');
+
+  useEffect(() => {
+    if (!autorizado) {
+      setCriticas(0);
+      return;
+    }
+
+    let ativo = true;
+    const carregar = () => {
+      api
+        .get<{ criticas: number }>('/notificacoes/resumo')
+        .then((resumo) => {
+          if (ativo) setCriticas(resumo.criticas);
+        })
+        .catch(() => {
+          /* O contador é conveniência: sem resposta, fica em zero. */
+        });
+    };
+
+    carregar();
+    const timer = window.setInterval(carregar, INTERVALO_NOTIFICACOES_MS);
+    return () => {
+      ativo = false;
+      window.clearInterval(timer);
+    };
+  }, [autorizado]);
+
+  return criticas;
 }
 
-interface GrupoNav {
-  secao: string;
-  itens: ItemNav[];
+function PainelModulos({ aberto, aoFechar }: { aberto: boolean; aoFechar: () => void }) {
+  const { temasVisiveis, blocosVisiveis } = useNavegacaoVisivel();
+  const painelRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!aberto) return;
+
+    const aoTeclar = (evento: KeyboardEvent) => {
+      if (evento.key === 'Escape') aoFechar();
+    };
+    const aoClicarFora = (evento: MouseEvent) => {
+      const alvo = evento.target as Node;
+      if (painelRef.current && !painelRef.current.contains(alvo) && !(alvo as Element).closest?.('.rail-item.modulos')) {
+        aoFechar();
+      }
+    };
+
+    document.addEventListener('keydown', aoTeclar);
+    document.addEventListener('mousedown', aoClicarFora);
+    return () => {
+      document.removeEventListener('keydown', aoTeclar);
+      document.removeEventListener('mousedown', aoClicarFora);
+    };
+  }, [aberto, aoFechar]);
+
+  if (!aberto) return null;
+
+  return (
+    <div className="painel-modulos" ref={painelRef} role="dialog" aria-label="Módulos do sistema">
+      <div className="painel-modulos-cabeca">
+        <strong>Módulos</strong>
+        <Link to="/modulos" onClick={aoFechar}>
+          Ver mapa completo <Icone nome="seta" tamanho={13} />
+        </Link>
+        <button type="button" className="btn btn-ghost btn-sm" onClick={aoFechar} aria-label="Fechar">
+          ✕
+        </button>
+      </div>
+
+      <div className="painel-modulos-grade">
+        {temasVisiveis.map((tema) => (
+          <div key={tema.slug} className="painel-modulos-tema" style={{ '--tema': tema.cor } as CSSProperties}>
+            <Link to={`/modulos/${tema.slug}`} className="painel-modulos-titulo" onClick={aoFechar}>
+              <span className="mapa-tema-numero">{tema.numero}</span>
+              {tema.titulo}
+            </Link>
+            <ul>
+              {blocosVisiveis(tema)
+                .flatMap((bloco) => bloco.itens)
+                .filter((item) => item.rota)
+                .filter((item, indice, lista) => lista.findIndex((outro) => outro.rota === item.rota) === indice)
+                .map((item) => (
+                  <li key={item.rota}>
+                    <NavLink to={item.rota!} onClick={aoFechar} className={({ isActive }) => (isActive ? 'ativa' : '')}>
+                      {item.titulo}
+                    </NavLink>
+                  </li>
+                ))}
+            </ul>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 }
-
-const GRUPOS: GrupoNav[] = [
-  {
-    secao: 'Campo',
-    itens: [
-      { titulo: 'Observações BBS', descricao: 'Registro seguro de comportamentos', rota: '/observacoes', icone: 'olho', permissao: 'observacoes:ler' },
-      { titulo: 'Planos de Ação', descricao: 'Tratativas, prazos e evidências', rota: '/planos-acao', icone: 'ok', permissao: 'planos:ler' },
-      { titulo: 'DDS Digital', descricao: 'Diálogo diário de segurança', rota: '/dds', icone: 'mensagem', permissao: 'observacoes:ler' },
-      { titulo: 'Acidentes e CAT', descricao: 'Ishikawa, 5 Porquês e relatório diário', rota: '/acidentes', icone: 'alerta', permissao: 'planos:ler' },
-      { titulo: 'Consequências', descricao: 'Medidas disciplinares e reincidência', rota: '/consequencias', icone: 'escudo', permissao: 'planos:ler' },
-      { titulo: 'APR', descricao: 'Análise preliminar de risco por etapa', rota: '/aprs', icone: 'etiqueta', permissao: 'observacoes:ler' },
-      { titulo: 'Checklists de pré-uso', descricao: 'Verificação com foto e carimbo', rota: '/checklists', icone: 'ferramenta', permissao: 'observacoes:ler' },
-    ],
-  },
-  {
-    secao: 'Saúde Ocupacional',
-    itens: [
-      { titulo: 'Colaboradores', descricao: 'Cadastro, ASO e PPP', rota: '/colaboradores', icone: 'capacete', permissao: 'saude:ler' },
-      { titulo: 'Absenteísmo', descricao: 'Afastamentos e taxa de absenteísmo', rota: '/absenteismo', icone: 'saude', permissao: 'saude:ler' },
-      { titulo: 'EPI e Estoque', descricao: 'Entregas NR-06 e reposição', rota: '/epis', icone: 'capacete', permissao: 'cadastros:ler' },
-      { titulo: 'Treinamentos', descricao: 'Matriz de capacitação e NRs', rota: '/treinamentos', icone: 'premio', permissao: 'saude:ler' },
-      { titulo: 'Documentos Legais', descricao: 'PGR, PCMSO, LTCAT, com versões', rota: '/documentos', icone: 'documento', permissao: 'saude:ler' },
-      { titulo: 'Ordens de Serviço', descricao: 'OS por função (NR-1) com ciência', rota: '/ordens-servico', icone: 'etiqueta', permissao: 'saude:ler' },
-    ],
-  },
-  {
-    secao: 'Conformidade e Riscos',
-    itens: [
-      { titulo: 'Inventário de Riscos', descricao: 'GRO/PGR e central de risco', rota: '/riscos', icone: 'escudo', permissao: 'cadastros:ler' },
-      { titulo: 'Auditorias', descricao: 'ISO 45001, 14001 e internas', rota: '/auditorias', icone: 'lupa', permissao: 'cadastros:ler' },
-      { titulo: 'Conformidade Legal', descricao: 'ASO e documentos vigentes', rota: '/conformidade', icone: 'ok', permissao: 'indicadores:ler' },
-      { titulo: 'Meio Ambiente e ESG', descricao: 'Ocorrências e indicadores ESG', rota: '/meio-ambiente', icone: 'mapa', permissao: 'observacoes:ler' },
-    ],
-  },
-  {
-    secao: 'Indicadores',
-    itens: [
-      { titulo: 'Executivo', descricao: 'Índice Global, maturidade e ranking', rota: '/dashboard-executivo', icone: 'alvo', permissao: 'indicadores:ler' },
-      { titulo: 'Gerencial', descricao: 'Causa raiz e área crítica', rota: '/dashboard-gerencial', icone: 'grafico', permissao: 'indicadores:ler' },
-      { titulo: 'Operacional', descricao: 'Fila do dia', rota: '/dashboard-operacional', icone: 'bussola', permissao: 'planos:ler' },
-      { titulo: 'Dashboard BBS', descricao: 'Comportamento × condição', rota: '/dashboard-bbs', icone: 'painel', permissao: 'indicadores:ler' },
-      { titulo: 'Mapa de calor', descricao: 'Áreas por coordenada de planta', rota: '/mapa-planta', icone: 'local', permissao: 'indicadores:ler' },
-      { titulo: 'Benchmark', descricao: 'Desempenho por supervisor', rota: '/benchmark-supervisores', icone: 'pessoas', permissao: 'indicadores:ler' },
-      { titulo: 'Financeiro', descricao: 'Custo evitado, ROI e parâmetros', rota: '/indicadores-financeiros', icone: 'alvo', permissao: 'indicadores:ler' },
-      { titulo: 'Intelligence', descricao: 'Leituras automáticas dos dados', rota: '/inteligencia', icone: 'raio', permissao: 'indicadores:ler' },
-      { titulo: 'Comunicação', descricao: 'Alertas e escalonamento automático', rota: '/comunicacao', icone: 'envelope', permissao: 'planos:ler' },
-    ],
-  },
-  {
-    secao: 'Configurações',
-    itens: [
-      { titulo: 'Clientes', descricao: 'Empresas atendidas e contratos', rota: '/clientes', icone: 'fabrica', permissao: 'cadastros:ler' },
-      { titulo: 'Terceiros', descricao: 'Contratadas e ranking SSMA', rota: '/terceiros', icone: 'parceria', permissao: 'cadastros:ler' },
-      { titulo: 'Centros de Negócio', descricao: 'Regionais, unidades e contratos', rota: '/centros-negocio', icone: 'pasta', permissao: 'cadastros:ler' },
-      { titulo: 'Áreas e QR Code', descricao: 'Locais de inspeção', rota: '/areas', icone: 'local', permissao: 'cadastros:ler' },
-      { titulo: 'Usuários e Acessos', descricao: 'Perfis e permissões', rota: '/usuarios', icone: 'pessoas', permissao: 'usuarios:gerenciar' },
-      { titulo: 'Empresa', descricao: 'Dados da consultoria', rota: '/empresa', icone: 'predio', permissao: 'cadastros:ler' },
-    ],
-  },
-];
-
-/** Mapa rota → { secao, titulo } para a topbar. */
-const TITULOS_ROTA: Array<{ prefixo: string; secao: string; titulo: string }> = [
-  { prefixo: '/empresa', secao: 'Configurações', titulo: 'Empresa de Consultoria' },
-  { prefixo: '/clientes', secao: 'Configurações', titulo: 'Clientes e Contratantes' },
-  { prefixo: '/terceiros', secao: 'Configurações', titulo: 'Empresas Contratadas' },
-  { prefixo: '/centros-negocio', secao: 'Configurações', titulo: 'Centros de Negócio' },
-  { prefixo: '/areas', secao: 'Configurações', titulo: 'Áreas e QR Code' },
-  { prefixo: '/usuarios', secao: 'Configurações', titulo: 'Usuários e Acessos' },
-  { prefixo: '/observacoes', secao: 'Campo', titulo: 'Observações BBS' },
-  { prefixo: '/planos-acao', secao: 'Campo', titulo: 'Planos de Ação' },
-  { prefixo: '/dds', secao: 'Campo', titulo: 'DDS — Diálogo Diário de Segurança' },
-  { prefixo: '/acidentes/relatorio-diario', secao: 'Campo', titulo: 'Relatório Diário de SSMA' },
-  { prefixo: '/acidentes', secao: 'Campo', titulo: 'Acidentes, CAT e Investigação' },
-  { prefixo: '/consequencias', secao: 'Campo', titulo: 'Gestão de Consequências' },
-  { prefixo: '/aprs', secao: 'Campo', titulo: 'APR — Análise Preliminar de Risco' },
-  { prefixo: '/checklists', secao: 'Campo', titulo: 'Checklists de Pré-uso' },
-  { prefixo: '/ordens-servico', secao: 'Saúde Ocupacional', titulo: 'Ordens de Serviço por Função' },
-  { prefixo: '/colaboradores', secao: 'Saúde Ocupacional', titulo: 'Colaboradores e ASO' },
-  { prefixo: '/absenteismo', secao: 'Saúde Ocupacional', titulo: 'Absenteísmo e Afastamentos' },
-  { prefixo: '/epis', secao: 'Saúde Ocupacional', titulo: 'EPI e Estoque' },
-  { prefixo: '/treinamentos', secao: 'Saúde Ocupacional', titulo: 'Treinamentos e Capacitação' },
-  { prefixo: '/documentos', secao: 'Saúde Ocupacional', titulo: 'Documentos Legais SSMA' },
-  { prefixo: '/riscos', secao: 'Conformidade e Riscos', titulo: 'Inventário de Riscos e GRO' },
-  { prefixo: '/auditorias', secao: 'Conformidade e Riscos', titulo: 'Auditorias' },
-  { prefixo: '/conformidade', secao: 'Conformidade e Riscos', titulo: 'Conformidade Legal' },
-  { prefixo: '/meio-ambiente', secao: 'Conformidade e Riscos', titulo: 'Meio Ambiente e ESG' },
-  { prefixo: '/dashboard-executivo', secao: 'Indicadores', titulo: 'Dashboard Executivo' },
-  { prefixo: '/dashboard-gerencial', secao: 'Indicadores', titulo: 'Dashboard Gerencial' },
-  { prefixo: '/dashboard-operacional', secao: 'Indicadores', titulo: 'Dashboard Operacional' },
-  { prefixo: '/dashboard-bbs', secao: 'Indicadores', titulo: 'Dashboard BBS' },
-  { prefixo: '/mapa-planta', secao: 'Indicadores', titulo: 'Mapa de Calor por Planta' },
-  { prefixo: '/benchmark-supervisores', secao: 'Indicadores', titulo: 'Benchmark de Supervisores' },
-  { prefixo: '/inteligencia', secao: 'Indicadores', titulo: 'SafetyGuard Intelligence' },
-  { prefixo: '/comunicacao', secao: 'Indicadores', titulo: 'Comunicação Automática' },
-  { prefixo: '/indicadores-financeiros', secao: 'Indicadores', titulo: 'Indicadores Financeiros' },
-];
 
 export function Layout() {
   const { pathname } = useLocation();
-  const { usuario, pode, sair } = useSessao();
+  const { usuario, sair } = useSessao();
+  const [painelAberto, setPainelAberto] = useState(false);
+  const criticas = useContadorNotificacoes();
 
-  const atual = TITULOS_ROTA.find((item) => pathname.startsWith(item.prefixo));
+  useEffect(() => {
+    setPainelAberto(false);
+  }, [pathname]);
+
+  const atual = tituloDaRota(pathname);
   const secaoAtual = atual?.secao ?? '';
   const tituloAtual = atual?.titulo ?? 'SafetyGuard EHS 360';
-
-  const visivel = (item: ItemNav) => !item.permissao || pode(item.permissao);
-  const grupoVisivel = (g: GrupoNav) => g.itens.some(visivel);
+  const corAtual = atual?.cor ?? 'var(--primary)';
 
   const iniciais = (usuario?.nome ?? '')
     .split(' ')
@@ -134,47 +142,60 @@ export function Layout() {
 
   return (
     <div className="shell">
-      <aside className="sidebar">
-        <div className="brand">
-          <Marca tamanho={38} />
-          <div>
-            <div className="t">SafetyGuard</div>
+      <aside className="rail">
+        <Link to="/inicio" className="rail-brand">
+          <Marca tamanho={36} />
+          <span>
+            <span className="t">SafetyGuard</span>
             <small>EHS 360 · SSMA</small>
-          </div>
-        </div>
+          </span>
+        </Link>
 
         <nav aria-label="Navegação principal">
-          {GRUPOS.filter(grupoVisivel).map((grupo) => (
-            <div key={grupo.secao}>
-              <div className="sec">{grupo.secao}</div>
-              {grupo.itens.filter(visivel).map((item) => (
-                <NavLink
+          {BARRA.map((item) => {
+            if (item.painel) {
+              const ativo = painelAberto || pathname.startsWith('/modulos');
+              return (
+                <button
                   key={item.rota}
-                  to={item.rota}
-                  className={({ isActive }) => `etapa-item ${isActive ? 'ativa' : ''}`}
+                  type="button"
+                  className={`rail-item modulos ${ativo ? 'ativa' : ''}`}
+                  onClick={() => setPainelAberto((aberto) => !aberto)}
+                  aria-expanded={painelAberto}
                 >
-                  <Icone nome={item.icone} tamanho={15} />
-                  <span>
-                    {item.titulo}
-                    <small>{item.descricao}</small>
+                  <Icone nome={item.icone} tamanho={18} />
+                  <span>{item.titulo}</span>
+                </button>
+              );
+            }
+
+            return (
+              <NavLink key={item.rota} to={item.rota} className={({ isActive }) => `rail-item ${isActive ? 'ativa' : ''}`}>
+                <Icone nome={item.icone} tamanho={18} />
+                <span>{item.titulo}</span>
+                {item.rota === '/comunicacao' && criticas > 0 && (
+                  <span className="rail-badge" aria-label={`${criticas} alertas críticos`}>
+                    {criticas > 99 ? '99+' : criticas}
                   </span>
-                </NavLink>
-              ))}
-            </div>
-          ))}
+                )}
+              </NavLink>
+            );
+          })}
         </nav>
 
-        <div className="foot">
+        <div className="rail-foot">
           {APP_NOME}
           <br />
-          Fastify · Prisma · PostgreSQL
+          SST é um compromisso de todos.
         </div>
       </aside>
 
+      <PainelModulos aberto={painelAberto} aoFechar={() => setPainelAberto(false)} />
+
       <div className="main">
-        <div className="topbar">
-          {secaoAtual && <span className="lbl">{secaoAtual}</span>}
-          <strong style={{ fontSize: 14 }}>{tituloAtual}</strong>
+        <div className="topbar" style={{ '--tema': corAtual } as CSSProperties}>
+          {secaoAtual && <span className="lbl tema">{secaoAtual}</span>}
+          <strong className="titulo-doc">{tituloAtual}</strong>
           <div className="user">
             <div style={{ textAlign: 'right' }}>
               <div>{usuario?.nome ?? '—'}</div>

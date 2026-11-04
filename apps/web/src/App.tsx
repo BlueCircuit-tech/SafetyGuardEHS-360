@@ -51,6 +51,9 @@ import { PlanoApresentacaoPage } from './paginas/PlanoApresentacaoPage';
 import { OrdensServicoPage } from './paginas/OrdensServicoPage';
 import { AprPage } from './paginas/AprPage';
 import { ChecklistsPage } from './paginas/ChecklistsPage';
+import { InicioPage } from './paginas/InicioPage';
+import { ModuloPage, ModulosPage } from './paginas/ModulosPage';
+import { AjudaPage, ConfiguracoesHubPage, IndicadoresHubPage, RelatoriosHubPage } from './paginas/HubsPage';
 
 /**
  * Exige sessão válida — e, opcionalmente, uma permissão.
@@ -105,7 +108,7 @@ function SomenteVisitante({ children }: { children: ReactNode }) {
     );
   }
 
-  return usuario ? <Navigate to="/empresa" replace /> : <>{children}</>;
+  return usuario ? <Navigate to="/inicio" replace /> : <>{children}</>;
 }
 
 /** Reduz o ruído das rotas: `rota('clientes', 'cadastros:ler', <ClientesPage />)`. */
@@ -132,7 +135,16 @@ export function App() {
             <Route path="/inspecao/:token" element={<LeituraQrPage />} />
 
             <Route element={<Layout />}>
-              <Route index element={<Navigate to="/empresa" replace />} />
+              <Route index element={<Navigate to="/inicio" replace />} />
+
+              {/* Casca: mapa, módulos e hubs — só exigem sessão; cada link já filtra pela permissão. */}
+              <Route path="inicio" element={<Protegido><InicioPage /></Protegido>} />
+              <Route path="modulos" element={<Protegido><ModulosPage /></Protegido>} />
+              <Route path="modulos/:slug" element={<Protegido><ModuloPage /></Protegido>} />
+              <Route path="indicadores" element={<Protegido><IndicadoresHubPage /></Protegido>} />
+              <Route path="relatorios" element={<Protegido><RelatoriosHubPage /></Protegido>} />
+              <Route path="configuracoes" element={<Protegido><ConfiguracoesHubPage /></Protegido>} />
+              <Route path="ajuda" element={<Protegido><AjudaPage /></Protegido>} />
 
               {rota('empresa', 'cadastros:ler', <EmpresaPage />)}
 
@@ -202,7 +214,7 @@ export function App() {
               {rota('comunicacao', 'planos:ler', <ComunicacaoPage />)}
               {rota('usuarios', 'usuarios:gerenciar', <UsuariosPage />)}
 
-              <Route path="*" element={<Navigate to="/empresa" replace />} />
+              <Route path="*" element={<Navigate to="/inicio" replace />} />
             </Route>
           </Routes>
         </ProvedorSessao>
