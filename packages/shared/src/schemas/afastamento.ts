@@ -39,6 +39,17 @@ export const ROTULO_TIPO_AFASTAMENTO: Record<TipoAfastamento, string> = {
 /** Tipos que devem estar vinculados a um Acidente registrado. */
 export const TIPOS_COM_CAT: TipoAfastamento[] = ['ACIDENTE_TRABALHO', 'ACIDENTE_TRAJETO'];
 
+/** Providencias no retorno ao trabalho. */
+export const PROVIDENCIAS_AFASTAMENTO = ['REABILITACAO', 'TREINAMENTO', 'MUDANCA_FUNCAO', 'ATIVIDADE_COMPATIVEL'] as const;
+export type ProvidenciaAfastamento = (typeof PROVIDENCIAS_AFASTAMENTO)[number];
+
+export const ROTULO_PROVIDENCIA_AFASTAMENTO: Record<ProvidenciaAfastamento, string> = {
+  REABILITACAO: 'Requer reabilitação',
+  TREINAMENTO: 'Requer treinamento',
+  MUDANCA_FUNCAO: 'Mudança de função',
+  ATIVIDADE_COMPATIVEL: 'Atividade compatível',
+};
+
 const afastamentoBaseSchema = z.object({
   clienteId: z.string({ required_error: 'Informe o cliente.' }).uuid('Cliente inválido.'),
   colaboradorId: z.string({ required_error: 'Informe o colaborador.' }).uuid('Colaborador inválido.'),
@@ -52,6 +63,12 @@ const afastamentoBaseSchema = z.object({
   /** CID-10 opcional — exigido para doença comum e doença ocupacional. */
   cid: opcional(z.string().trim().max(10)),
   descricao: opcional(z.string().trim().max(500)),
+
+  /** Fotografia no momento do afastamento: funcao, setor e lideranca direta. */
+  funcao: opcional(z.string().trim().max(80)),
+  setor: opcional(z.string().trim().max(80)),
+  liderNome: opcional(z.string().trim().max(120)),
+  providencias: z.array(z.enum(PROVIDENCIAS_AFASTAMENTO)).max(4).default([]),
 });
 
 function validarAfastamento(

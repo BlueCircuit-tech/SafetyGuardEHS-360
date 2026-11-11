@@ -13,19 +13,24 @@ import {
   type PlanoAcaoFiltro,
   type SituacaoEscalonamento,
   type TipoObservacao,
+  type StatusPlano,
+  deveCobrarChefia,
+  ROTULO_CRITICIDADE_PLANO,
 } from '@safetyguard/shared';
 import { prisma } from '../../db.js';
 import { Conflito, NaoEncontrado, RequisicaoInvalida } from '../../lib/erros.js';
 import { calcularDiferenca, registrarAuditoria, type ContextoAuditoria } from '../../lib/auditoria.js';
 import { obterEmpresaOuFalhar } from '../empresa/empresa.service.js';
 import { comunicacaoDaObservacao } from '../observacoes/observacao.service.js';
-import { despacharEmails, registrarNotificacoes } from './notificacao.service.js';
+import { despacharEmails, registrarNotificacoes, cobrarChefiaPorPlano } from './notificacao.service.js';
 
 const ENTIDADE = 'PlanoAcao';
+const MS_POR_DIA = 24 * 60 * 60 * 1000;
 const MS_POR_HORA = 60 * 60 * 1000;
 
 /** Observacao minima para derivar a regra de comunicacao de um plano. */
 export interface ObservacaoDoPlano {
+  fotoUrl?: string | null;
   tipo: string;
   classificacaoBird: string | null;
   grauRisco: string | null;
@@ -77,6 +82,7 @@ export const COM_RELACOES = {
       iir: true,
       grauRisco: true,
       classificacaoBird: true,
+      fotoUrl: true,
       causa: { select: { descricao: true } },
     },
   },
@@ -384,7 +390,17 @@ export async function abrirPlanoDaObservacao(
 
   const criticidade = criticidadePeloGrau(observacao.grauRisco);
   const horas = regra?.prazoHoras ?? PRAZO_PADRAO_POR_CRITICIDADE[criticidade];
-  const prazo = observacao.prazoLimite ?? new Date(observacao.dataHora.getTime() + horas * MS_POR_HORA);
+  const prazoDaMatriz = observacao.prazoLimite ?? new Date(observacao.dataHora.getTime() + horas * MS_POR_HORA);
+  /*
+   * "Imediato" na matriz e o prazo da CONTENCAO (acao imediata na observacao).
+   * O plano corretivo precisa de um prazo exequivel: sem isto ele nascia com
+   * a mesma data/hora do relato, ja vencido. Piso: 24h a partir de agora, ou
+   * o prazo padrao da criticidade se for maior. A escada de escalonamento
+   * continua ancorada no registro, entao a cobranca nao atrasa.
+   */
+  const pisoHoras = Math.max(24, PRAZO_PADRAO_POR_CRITICIDADE[criticidade]);
+  const piso = new Date(Date.now() + pisoHoras * MS_POR_HORA);
+  const prazo = prazoDaMatriz.getTime() < Date.now() + 24 * MS_POR_HORA ? piso : prazoDaMatriz;
 
   const dados = {
     origem: 'OBSERVACAO' as const,
@@ -402,6 +418,8 @@ export async function abrirPlanoDaObservacao(
     status: 'ABERTO' as const,
     dataConclusao: null,
     evidenciaUrl: null,
+    // A foto do desvio vira o "antes" do plano; a evidencia sera o "depois".
+    fotoInicialUrl: observacao.fotoUrl,
     comentarioConclusao: null,
     observacoes: null,
   };
@@ -512,6 +530,59 @@ export interface ResultadoEscalonamento {
   escalonados: Array<{ id: string; codigo: string; de: number; para: number; nivel: string }>;
   /** E-mails despachados depois do commit — o agendador loga isto. */
   emails: { enviadas: number; falhas: number; motivos?: string[] };
+  /** Cobrancas da chefia (prazo + carencia 10/20/30 dias) disparadas nesta rodada. */
+  cobrancasChefia: Array<{ id: string; codigo: string; diasAtraso: number; enviado: boolean; destinatarios: number; motivo?: string }>;
+}
+
+/**
+ * Cobranca da chefia hierarquica: pendencias nao tratadas 10 dias (ALTA),
+ * 20 (MEDIA) ou 30 (BAIXA) apos o prazo. Cada plano e cobrado uma unica vez
+ * (`cobrancaChefiaEm`); reabrir a cobranca exige limpar o campo.
+ */
+export async function processarCobrancasDaChefia(agora = new Date()): Promise<ResultadoEscalonamento['cobrancasChefia']> {
+  const candidatos = await prisma.planoAcao.findMany({
+    where: { status: { in: ['ABERTO', 'EM_ANDAMENTO'] }, prazo: { lt: agora }, cobrancaChefiaEm: null },
+    include: { cliente: { select: { nomeFantasia: true } }, area: { select: { nome: true } } },
+  });
+
+  const resultado: ResultadoEscalonamento['cobrancasChefia'] = [];
+  for (const plano of candidatos) {
+    if (!deveCobrarChefia({ status: plano.status as StatusPlano, criticidade: plano.criticidade as CriticidadePlano, prazo: plano.prazo, cobrancaChefiaEm: plano.cobrancaChefiaEm }, agora)) {
+      continue;
+    }
+    const diasAtraso = Math.floor((agora.getTime() - plano.prazo.getTime()) / MS_POR_DIA);
+    const envio = await cobrarChefiaPorPlano({
+      id: plano.id,
+      codigo: plano.codigo,
+      acao: plano.acao,
+      criticidade: ROTULO_CRITICIDADE_PLANO[plano.criticidade as CriticidadePlano],
+      prazo: plano.prazo,
+      responsavelNome: plano.responsavelNome,
+      responsavelEmail: plano.responsavelEmail,
+      clienteId: plano.clienteId,
+      cliente: plano.cliente.nomeFantasia,
+      area: plano.area?.nome ?? null,
+      diasAtraso,
+    });
+
+    // Marca como cobrado mesmo sem destinatario: o registro de auditoria diz
+    // que a regra rodou; sem contato cadastrado nao ha a quem cobrar de novo.
+    await prisma.$transaction(async (tx) => {
+      await tx.planoAcao.update({ where: { id: plano.id }, data: { cobrancaChefiaEm: agora } });
+      await registrarAuditoria(tx, {
+        entidade: ENTIDADE,
+        entidadeId: plano.id,
+        acao: 'ATUALIZACAO',
+        alteracoes: {
+          cobrancaChefia: { de: null, para: envio.enviado ? `enviada a ${envio.destinatarios} destinatario(s)` : `nao enviada: ${envio.motivo ?? 'sem destinatario'}` },
+        },
+        contexto: { autor: 'cobranca-chefia-automatica' },
+      });
+    });
+
+    resultado.push({ id: plano.id, codigo: plano.codigo, diasAtraso, ...envio });
+  }
+  return resultado;
 }
 
 /**
@@ -617,8 +688,9 @@ export async function processarEscalonamentos(contexto: ContextoAuditoria = {}):
   }
 
   const emails = await despacharEmails(emailIds);
+  const cobrancasChefia = await processarCobrancasDaChefia(agora);
 
-  return { avaliados: vencidos.length, escalonados, emails };
+  return { avaliados: vencidos.length, escalonados, emails, cobrancasChefia };
 }
 
 export async function listarAuditoriaPlano(id: string, limite = 50) {

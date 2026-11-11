@@ -950,3 +950,62 @@ Mudanças de contrato:
 - **`GET /notificacoes/resumo`** ganhou `voz`, `agrupadas`, `criticas`,
   `tempoMedioRespostaHoras` e `planosRespondidos`. "Resposta" = o plano mudar
   para Em andamento (`dataInicioTratativa` no `PlanoAcao`).
+
+---
+
+## Etapa 24 — melhorias da plataforma
+
+Todos sob `/api/v1`, com a mesma autenticação e o mesmo formato de erro. Rotas marcadas **(pública)** não exigem login — o token do QR é a credencial.
+
+### Clientes
+- `GET|POST /clientes/:id/contatos` · `PUT|DELETE /clientes/contatos/:id` — responsáveis por nível hierárquico (`SUPERVISOR`, `COORDENADOR`, `GERENTE`, `DIRETORIA`, `SSMA`, `RH`...). Alimentam e-mails de escalonamento, cobrança da chefia, aviso de consequência e resumo diário.
+- `GET /clientes/:id/qrcode` · `GET /clientes/:id/qrcode.svg` — QR Code único do cliente.
+- `GET /clientes/qr/:token` **(pública)** — áreas ativas do cliente para escolher onde registrar.
+
+### Planos de ação
+- `POST /planos-acao/:id/foto-inicial` — foto "antes" (a evidência é o "depois").
+- Plano aberto de observação com prazo "imediato" recebe piso de 24h (ou o padrão da criticidade).
+- Cobrança da chefia: plano em aberto 10/20/30 dias após o prazo (Alta/Média/Baixa) dispara e-mail à cadeia hierárquica uma única vez (`cobrancaChefiaEm`).
+- `GET /cron/escalonar` agora também roda a cobrança da chefia e o resumo diário de pendências (`alertasDiarios`).
+
+### Colaboradores, ASO e documentos
+- `POST /colaboradores/:id/foto` · `POST /colaboradores/:id/bloqueio` `{bloqueado, motivo}`.
+- `GET /colaboradores/:id/carteirinha` · `GET /colaboradores/:id/carteirinha.svg` · `GET /carteirinha/:token` **(pública)**.
+- `GET /colaboradores/:id/documentacao` · `GET /colaboradores/documentacao/pendencias`.
+- `GET /asos/relatorio` · `GET /asos/relatorio.xlsx` (filtro `situacao=VALIDO|VENCIDO|VIGENTE|A_VENCER|SEM_ASO`) · `GET /asos/a-vencer?dias=35`.
+- `GET /colaboradores/lista.xlsx` — funcionários com telefone, e-mail e liderança.
+- Filtros novos em `GET /colaboradores`: `situacaoAso`, `bloqueado`.
+- Novos tipos de documento: `FICHA_REGISTRO`, `CONTRATO_TRABALHO`, `ACORDO_COMPENSACAO_HORAS`, `ORDEM_SERVICO`, `FICHA_EPI`, `PGRSS`, `PGRS`, `CTR_MANIFESTO`, `INVENTARIO_RESIDUOS`.
+
+### Relatórios
+- `GET /relatorios/mensal` · `GET /relatorios/mensal.xlsx?mes=AAAA-MM&clienteId` — realizado e pendências.
+- `GET /relatorios/fotografico` · modelos: `GET|POST /relatorios/modelos`, `POST /relatorios/modelos/padrao|gerar`, `POST /relatorios/modelos/:id/preencher|redigir`.
+
+### DDS
+- `POST /dds/gerar` — roteiro por IA (ou roteiro-modelo sem `ANTHROPIC_API_KEY`). `GET /dds/painel`. Filtros `lider`, `temaId`.
+
+### Acidentes e absenteísmo
+- `lesaoPermanente` → `diasDebitados` (NBR 14280) e `diasComputados`. `parteCorpoAtingida` aceita várias regiões.
+- Afastamento: `funcao`, `setor`, `liderNome` (copiados do colaborador se vazios), `providencias[]`. Painel com `porFuncao`, `porAno`, `porMes`.
+
+### Consequências
+- `POST /consequencias` devolve `aviso` (e-mail à hierarquia). `GET /consequencias/relatorio?ano&mes&clienteId`.
+
+### EPI
+- `GET /epis/:id` · `POST /epis/:id/anexos` · `DELETE /epis/anexos/:id` · `GET|POST /epis/entradas` · `GET /epis/consumo?meses=3|6|9|12` · `GET /epis/trocas` · `GET /epis/ficha/:colaboradorId` · `POST /epis/entregas/:id/assinatura`.
+- Ponto de reposição: mínimo informado ou 10% do `estoqueReferencia`.
+
+### Documentação técnica
+- OS: `PUT /ordens-servico/:id`, `POST /ordens-servico/:id/arquivo-assinado`, `GET /ordens-servico/:id/verificar`.
+- APR: `modelo` (`APR`/`AST`), `tiposServico[]`, `DELETE /aprs/:id`, `GET /aprs/:id/verificar`.
+- Checklists: `GET|POST /checklists/modelos/padrao`.
+- Treinamentos: `POST /capacitacao/requisitos/lote`.
+
+### Módulos novos
+- CIPA: `/cipas`, `/cipas/:id/documentos`, `/cipas/resumo`.
+- Ergonomia: `/ergonomia/avaliacoes`, `/ergonomia/checklist-padrao`, `/ergonomia/resumo`.
+- Químicos: `/quimicos`, `/quimicos/:id/fds`, `/quimicos/resumo`.
+- Brigada: `/brigada/brigadistas`, `/brigada/extintores`, `/brigada/extintores/:id/inspecao`, `/brigada/resumo`.
+- Meio ambiente: `/meio-ambiente/aspectos`, `/meio-ambiente/dashboard`.
+- Fornecedores: `/fornecedores`. Financeiro: `/financeiro/lancamentos`, `/financeiro/lancamentos/resumo`, `/financeiro/lancamentos/planilha.xlsx`.
+- Cartão de ponto: `/ponto`, `/ponto/resumo`, `/ponto/relatorio.xlsx`, `/ponto/:id/encerrar`, `PUT /ponto/valor-hora`.

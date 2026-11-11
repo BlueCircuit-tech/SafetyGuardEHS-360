@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { mkdir, unlink, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, unlink, writeFile } from 'node:fs/promises';
 import { basename, join } from 'node:path';
 import { uploadDir } from '../env.js';
 import { ErroApp, RequisicaoInvalida } from './erros.js';
@@ -151,6 +151,26 @@ export async function salvarDocumento(
   await garantirDiretorioDeUpload();
   await writeFile(join(uploadDir, nomeArquivo), conteudo);
   return `${PREFIXO_PUBLICO}/${nomeArquivo}`;
+}
+
+/**
+ * Le os bytes de um arquivo gravado (local ou Supabase). Devolve null quando
+ * nao ha URL ou o arquivo nao pode ser lido — quem verifica carimbo decide o
+ * que fazer sem a imagem.
+ */
+export async function lerArquivoPublico(url: string | null | undefined): Promise<Buffer | null> {
+  if (!url) return null;
+  try {
+    if (/^https?:\/\//i.test(url)) {
+      const resposta = await fetch(url);
+      if (!resposta.ok) return null;
+      return Buffer.from(await resposta.arrayBuffer());
+    }
+    if (!url.startsWith(`${PREFIXO_PUBLICO}/`)) return null;
+    return await readFile(join(uploadDir, basename(url)));
+  } catch {
+    return null;
+  }
 }
 
 /**

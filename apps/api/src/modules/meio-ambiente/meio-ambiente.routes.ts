@@ -2,23 +2,31 @@ import type { FastifyInstance } from 'fastify';
 import type { Prisma } from '@prisma/client';
 import { z } from 'zod';
 import {
+  ROTULO_CONDICAO_ASPECTO,
   ROTULO_OCORRENCIA_AMBIENTAL,
+  aspectoAmbientalCreateSchema,
+  aspectoAmbientalUpdateSchema,
+  aspectoSignificativo,
   indicadorAmbientalSchema,
   notaAmbiental,
   ocorrenciaAmbientalCreateSchema,
   ocorrenciaAmbientalUpdateSchema,
   planoDeComunicacao,
+  significanciaAmbiental,
+  type CondicaoAspecto,
   type GrauRiscoOcorrencia,
   type TipoOcorrenciaAmbiental,
 } from '@safetyguard/shared';
 import { prisma } from '../../db.js';
-import { NaoEncontrado } from '../../lib/erros.js';
+import { NaoEncontrado, RequisicaoInvalida } from '../../lib/erros.js';
 import { calcularDiferenca, registrarAuditoria } from '../../lib/auditoria.js';
 import { contextoDeAuditoria } from '../../lib/autenticacao.js';
 import { guardaPorMetodo } from '../../lib/guarda.js';
 import { despacharEmails, registrarNotificacoes } from '../planos/notificacao.service.js';
+import { montarDashboardMeioAmbiente } from './meio-ambiente.service.js';
 
 const ENTIDADE = 'OcorrenciaAmbiental';
+const ENTIDADE_ASPECTO = 'AspectoAmbiental';
 const paramsSchema = z.object({ id: z.string().uuid('Identificador invalido.') });
 
 /**
@@ -234,5 +242,174 @@ export async function registrarRotasMeioAmbiente(app: FastifyInstance): Promise<
     });
 
     return reply.status(201).send(leitura);
+  });
+
+  /* ------------------------------------------------- aspectos e impactos --- */
+
+  /** A area, quando informada, precisa pertencer ao cliente do aspecto. */
+  async function validarAreaDoCliente(clienteId: string, areaId: string | null | undefined): Promise<void> {
+    if (!areaId) return;
+    const area = await prisma.area.findUnique({ where: { id: areaId }, select: { clienteId: true } });
+    if (!area) throw new NaoEncontrado('Area nao encontrada.', 'AREA_NAO_ENCONTRADA');
+    if (area.clienteId !== clienteId) {
+      throw new RequisicaoInvalida('A area informada nao pertence ao cliente.', 'AREA_DE_OUTRO_CLIENTE', {
+        campos: { areaId: ['A area informada nao pertence ao cliente.'] },
+      });
+    }
+  }
+
+  app.get('/meio-ambiente/aspectos', async (request) => {
+    const filtro = z
+      .object({
+        clienteId: z.string().uuid().optional(),
+        areaId: z.string().uuid().optional(),
+        significativo: z.enum(['true', 'false']).optional(),
+        busca: z.string().trim().max(120).optional(),
+      })
+      .parse(request.query);
+
+    const where: Prisma.AspectoAmbientalWhereInput = {
+      ...(filtro.clienteId ? { clienteId: filtro.clienteId } : {}),
+      ...(filtro.areaId ? { areaId: filtro.areaId } : {}),
+      ...(filtro.significativo ? { significativo: filtro.significativo === 'true' } : {}),
+    };
+    if (filtro.busca) {
+      where.OR = [
+        { atividade: { contains: filtro.busca, mode: 'insensitive' } },
+        { aspecto: { contains: filtro.busca, mode: 'insensitive' } },
+        { impacto: { contains: filtro.busca, mode: 'insensitive' } },
+      ];
+    }
+
+    const itens = await prisma.aspectoAmbiental.findMany({
+      where,
+      // Os mais significativos primeiro: e o que a gestao precisa olhar.
+      orderBy: [{ significancia: 'desc' }, { atividade: 'asc' }],
+      take: 500,
+      include: {
+        cliente: { select: { id: true, nomeFantasia: true } },
+        area: { select: { id: true, nome: true, codigo: true } },
+      },
+    });
+
+    return itens.map((aspecto) => ({
+      ...aspecto,
+      rotuloCondicao: ROTULO_CONDICAO_ASPECTO[aspecto.condicao as CondicaoAspecto] ?? aspecto.condicao,
+    }));
+  });
+
+  app.post('/meio-ambiente/aspectos', async (request, reply) => {
+    const dados = aspectoAmbientalCreateSchema.parse(request.body);
+
+    const cliente = await prisma.cliente.findUnique({ where: { id: dados.clienteId }, select: { id: true } });
+    if (!cliente) throw new NaoEncontrado('Cliente nao encontrado.', 'CLIENTE_NAO_ENCONTRADO');
+    await validarAreaDoCliente(dados.clienteId, dados.areaId);
+
+    // Significancia e sempre do servidor — o schema ja descarta o que vier do cliente.
+    const significancia = significanciaAmbiental(dados.severidade, dados.probabilidade);
+
+    const aspecto = await prisma.$transaction(async (tx) => {
+      const criado = await tx.aspectoAmbiental.create({
+        data: {
+          ...dados,
+          significancia,
+          significativo: aspectoSignificativo(significancia),
+        } as Prisma.AspectoAmbientalUncheckedCreateInput,
+      });
+      await registrarAuditoria(tx, {
+        entidade: ENTIDADE_ASPECTO,
+        entidadeId: criado.id,
+        acao: 'CRIACAO',
+        alteracoes: calcularDiferenca({}, criado as unknown as Record<string, unknown>),
+        contexto: contextoDeAuditoria(request),
+      });
+      return criado;
+    });
+
+    return reply.status(201).send(aspecto);
+  });
+
+  app.put('/meio-ambiente/aspectos/:id', async (request) => {
+    const { id } = paramsSchema.parse(request.params);
+    const dados = aspectoAmbientalUpdateSchema.parse(request.body);
+
+    const atual = await prisma.aspectoAmbiental.findUnique({ where: { id } });
+    if (!atual) throw new NaoEncontrado('Aspecto ambiental nao encontrado.', 'ASPECTO_NAO_ENCONTRADO');
+
+    const clienteId = dados.clienteId ?? atual.clienteId;
+    if (dados.clienteId && dados.clienteId !== atual.clienteId) {
+      const cliente = await prisma.cliente.findUnique({ where: { id: dados.clienteId }, select: { id: true } });
+      if (!cliente) throw new NaoEncontrado('Cliente nao encontrado.', 'CLIENTE_NAO_ENCONTRADO');
+    }
+    // Trocar o cliente sem trocar a area deixaria a area orfã: revalida com o que ficar.
+    await validarAreaDoCliente(clienteId, dados.areaId === undefined ? atual.areaId : dados.areaId);
+
+    // Recalcula a partir do par final (o que veio + o que ja estava).
+    const significancia = significanciaAmbiental(
+      dados.severidade ?? atual.severidade,
+      dados.probabilidade ?? atual.probabilidade,
+    );
+
+    return prisma.$transaction(async (tx) => {
+      const aspecto = await tx.aspectoAmbiental.update({
+        where: { id },
+        data: {
+          ...dados,
+          significancia,
+          significativo: aspectoSignificativo(significancia),
+        } as Prisma.AspectoAmbientalUncheckedUpdateInput,
+      });
+      const diferenca = calcularDiferenca(
+        atual as unknown as Record<string, unknown>,
+        aspecto as unknown as Record<string, unknown>,
+      );
+      if (Object.keys(diferenca).length > 0) {
+        await registrarAuditoria(tx, {
+          entidade: ENTIDADE_ASPECTO,
+          entidadeId: id,
+          acao: 'ATUALIZACAO',
+          alteracoes: diferenca,
+          contexto: contextoDeAuditoria(request),
+        });
+      }
+      return aspecto;
+    });
+  });
+
+  app.delete('/meio-ambiente/aspectos/:id', async (request, reply) => {
+    const { id } = paramsSchema.parse(request.params);
+    const atual = await prisma.aspectoAmbiental.findUnique({
+      where: { id },
+      select: { atividade: true, aspecto: true },
+    });
+    if (!atual) throw new NaoEncontrado('Aspecto ambiental nao encontrado.', 'ASPECTO_NAO_ENCONTRADO');
+
+    await prisma.$transaction(async (tx) => {
+      await tx.aspectoAmbiental.delete({ where: { id } });
+      await registrarAuditoria(tx, {
+        entidade: ENTIDADE_ASPECTO,
+        entidadeId: id,
+        acao: 'EXCLUSAO',
+        alteracoes: {
+          atividade: { de: atual.atividade, para: null },
+          aspecto: { de: atual.aspecto, para: null },
+        },
+        contexto: contextoDeAuditoria(request),
+      });
+    });
+    return reply.status(204).send();
+  });
+
+  /* --------------------------------------------------------- dashboard --- */
+
+  app.get('/meio-ambiente/dashboard', async (request) => {
+    const { clienteId, meses } = z
+      .object({
+        clienteId: z.string().uuid().optional(),
+        meses: z.coerce.number().int().min(1).max(36).default(12),
+      })
+      .parse(request.query);
+
+    return montarDashboardMeioAmbiente({ clienteId, meses });
   });
 }

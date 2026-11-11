@@ -38,6 +38,8 @@ import { registrarRotasFornecedores as rotasFornecedores } from './modules/forne
 import { registrarRotasPonto as rotasPonto } from './modules/ponto/ponto.routes.js';
 import { registrarRotasPlanilhaFinanceira as rotasPlanilhaFinanceira } from './modules/financeiro/planilha.routes.js';
 import { registrarRotasRelatorios as rotasRelatorios } from './modules/relatorios/relatorios.routes.js';
+import { registrarRotasColaboradorExtras as rotasColaboradorExtras } from './modules/saude/colaborador-extras.routes.js';
+import { registrarRotasRelatorioMensal as rotasRelatorioMensal } from './modules/relatorios/mensal.routes.js';
 import { prisma } from './db.js';
 
 export const PREFIXO_API = '/api/v1';
@@ -106,6 +108,8 @@ export async function criarApp(): Promise<FastifyInstance> {
       await api.register(rotasObservacoes);
       await api.register(rotasPlanos);
       await api.register(rotasSaude);
+      await api.register(rotasColaboradorExtras);
+      await api.register(rotasRelatorioMensal);
       await api.register(rotasDashboards);
       await api.register(rotasTreinamentos);
       await api.register(rotasAuditorias);

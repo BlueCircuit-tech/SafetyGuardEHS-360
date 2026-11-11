@@ -179,8 +179,9 @@ describe.skipIf(!temBanco)('API (integracao)', () => {
       payload: { clienteId: cliente.id, nome: 'Empilhadeira (teste)', tipoEquipamento: 'Empilhadeira', itens: [{ descricao: 'Freio', impeditivo: true }, { descricao: 'Buzina', impeditivo: false }] },
     });
     expect(modelo.statusCode).toBe(201);
-    criados.push(() => prisma.execucaoChecklist.deleteMany({ where: { modeloId: modelo.json().id } }));
+    // A limpeza roda em ordem reversa: o modelo sai depois das execucoes (FK).
     criados.push(() => prisma.modeloChecklist.delete({ where: { id: modelo.json().id } }));
+    criados.push(() => prisma.execucaoChecklist.deleteMany({ where: { modeloId: modelo.json().id } }));
 
     const reprovado = await app.inject({
       method: 'POST', url: '/api/v1/checklists/execucoes', headers: h,
@@ -211,12 +212,22 @@ describe.skipIf(!temBanco)('API (integracao)', () => {
     const vencidos = await prisma.planoAcao.findMany({
       where: { status: 'ABERTO', prazo: { lt: new Date() }, observacaoId: { not: null } },
       take: 3,
-      select: { id: true, nivelEscalonamento: true },
+      select: { id: true, nivelEscalonamento: true, responsavelEmail: true, cobrancaChefiaEm: true },
     });
-    const antes = new Map(vencidos.map((p) => [p.id, p.nivelEscalonamento]));
-    await prisma.planoAcao.updateMany({ where: { id: { in: vencidos.map((p) => p.id) } }, data: { nivelEscalonamento: 0 } });
+    const antes = new Map(vencidos.map((p) => [p.id, p]));
+    // Sem destinatario o despacho nao chama o SMTP: garante um e-mail de responsavel
+    // para o teste nao depender de como o banco de demonstracao foi semeado.
+    await prisma.planoAcao.updateMany({
+      where: { id: { in: vencidos.map((p) => p.id) } },
+      data: { nivelEscalonamento: 0, responsavelEmail: 'responsavel.teste@example.com' },
+    });
     criados.push(async () => {
-      for (const [id, nivel] of antes) await prisma.planoAcao.update({ where: { id }, data: { nivelEscalonamento: nivel } });
+      for (const [id, plano] of antes) {
+        await prisma.planoAcao.update({
+          where: { id },
+          data: { nivelEscalonamento: plano.nivelEscalonamento, responsavelEmail: plano.responsavelEmail, cobrancaChefiaEm: plano.cobrancaChefiaEm },
+        });
+      }
     });
 
     try {

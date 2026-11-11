@@ -368,8 +368,40 @@ export async function registrarRotasSaude(app: FastifyInstance): Promise<void> {
     }
     const topColaboradores = [...porColaborador.values()].sort((a, b) => b.dias - a.dias).slice(0, 5);
 
+    // Dashboard colaborador x funcao x tempo x ano (pedido da operacao).
+    const porFuncao = new Map<string, { funcao: string; afastamentos: number; dias: number; colaboradores: Set<string> }>();
+    const porAno = new Map<number, { ano: number; afastamentos: number; dias: number }>();
+    const porMes = new Map<string, { mes: string; afastamentos: number; dias: number }>();
+    for (const a of afastamentos) {
+      const funcao = a.funcao ?? a.colaborador.funcao;
+      const f = porFuncao.get(funcao) ?? { funcao, afastamentos: 0, dias: 0, colaboradores: new Set<string>() };
+      f.afastamentos += 1;
+      f.dias += a.diasAfastamento;
+      f.colaboradores.add(a.colaboradorId);
+      porFuncao.set(funcao, f);
+      const ano = a.dataInicio.getFullYear();
+      const y = porAno.get(ano) ?? { ano, afastamentos: 0, dias: 0 };
+      y.afastamentos += 1;
+      y.dias += a.diasAfastamento;
+      porAno.set(ano, y);
+      const mes = a.dataInicio.toISOString().slice(0, 7);
+      const m = porMes.get(mes) ?? { mes, afastamentos: 0, dias: 0 };
+      m.afastamentos += 1;
+      m.dias += a.diasAfastamento;
+      porMes.set(mes, m);
+    }
+
+    // Dias debitados por lesao permanente (NBR 14280) no mesmo periodo.
+    const debitados = await prisma.acidente.aggregate({ where: { ...(clienteId ? { clienteId } : {}), data: { gte: inicio }, diasDebitados: { gt: 0 } }, _sum: { diasDebitados: true }, _count: { _all: true } });
+
     return {
       periodo: { inicio, fim: agora, meses, diasUteis: diasPeriodo },
+      diasDebitados: debitados._sum.diasDebitados ?? 0,
+      acidentesComLesaoPermanente: debitados._count._all,
+      diasComputados: totalDias + (debitados._sum.diasDebitados ?? 0),
+      porFuncao: [...porFuncao.values()].map((f) => ({ funcao: f.funcao, afastamentos: f.afastamentos, dias: f.dias, colaboradores: f.colaboradores.size })).sort((a, b) => b.dias - a.dias),
+      porAno: [...porAno.values()].sort((a, b) => a.ano - b.ano),
+      porMes: [...porMes.values()].sort((a, b) => a.mes.localeCompare(b.mes)),
       totalAfastamentos: afastamentos.length,
       totalDias,
       taxaAbsenteismo,
@@ -427,7 +459,16 @@ export async function registrarRotasSaude(app: FastifyInstance): Promise<void> {
 
   app.post('/absenteismo', async (request, reply) => {
     const dados = afastamentoCreateSchema.parse(request.body);
-    const novo = await prisma.afastamento.create({ data: dados as unknown as Parameters<typeof prisma.afastamento.create>[0]['data'] });
+    // Funcao, setor e lideranca sao fotografados do cadastro quando nao vierem informados.
+    const colaborador = await prisma.colaborador.findUnique({ where: { id: dados.colaboradorId }, select: { funcao: true, setor: true, liderNome: true, clienteId: true } });
+    if (!colaborador) throw new NaoEncontrado('Colaborador nao encontrado.', 'COLABORADOR_NAO_ENCONTRADO');
+    const completo = {
+      ...dados,
+      funcao: dados.funcao ?? colaborador.funcao,
+      setor: dados.setor ?? colaborador.setor,
+      liderNome: dados.liderNome ?? colaborador.liderNome,
+    };
+    const novo = await prisma.afastamento.create({ data: completo as unknown as Parameters<typeof prisma.afastamento.create>[0]['data'] });
     return reply.status(201).send({ ...novo, rotulos: { tipo: ROTULO_TIPO_AFASTAMENTO[novo.tipo as TipoAfastamento] } });
   });
 

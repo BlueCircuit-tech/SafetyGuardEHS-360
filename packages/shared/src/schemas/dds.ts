@@ -26,7 +26,20 @@ const ddsBaseSchema = z.object({
     .max(1000, 'No maximo 1000 participantes.'),
   duracaoMinutos: opcional(z.coerce.number().int().min(1).max(120)),
   observacoes: opcional(z.string().trim().max(1000)),
+  /** Roteiro apresentado (texto), digitado ou gerado pela assistente. */
+  conteudo: opcional(z.string().trim().max(20000)),
+  geradoPorIa: z.boolean().default(false),
 });
+
+/** Pedido de geracao de roteiro de DDS pela assistente. */
+export const ddsGerarSchema = z.object({
+  temaId: opcional(z.string().uuid('Tema invalido.')),
+  temaLivre: opcional(z.string().trim().max(150)),
+  /** Contexto da operacao (area, atividade do dia, ocorrencias recentes). */
+  contexto: opcional(z.string().trim().max(2000)),
+  duracaoMinutos: z.coerce.number().int().min(5).max(30).default(10),
+});
+export type DdsGerarInput = z.input<typeof ddsGerarSchema>;
 
 function validarDds(dados: { temaId?: string | null; temaLivre?: string | null }, ctx: z.RefinementCtx): void {
   if (!dados.temaId && !dados.temaLivre) {
@@ -48,6 +61,8 @@ export const ddsFiltroSchema = z.object({
   clienteId: z.string().uuid('Cliente invalido.').optional(),
   areaId: z.string().uuid('Area invalida.').optional(),
   busca: z.string().trim().max(120).optional(),
+  lider: z.string().trim().max(120).optional(),
+  temaId: z.string().uuid().optional(),
   de: z.coerce.date().optional(),
   ate: z.coerce.date().optional(),
   pagina: z.coerce.number().int().min(1).default(1),

@@ -2,13 +2,17 @@ import type { FastifyInstance } from 'fastify';
 import { Prisma } from '@prisma/client';
 import { z } from 'zod';
 import {
+  DIAS_DEBITADOS,
   ROTULO_INVESTIGACAO,
+  ROTULO_LESAO_PERMANENTE,
   ROTULO_TIPO_ACIDENTE,
   acidenteCreateSchema,
   acidenteUpdateSchema,
+  diasComputados,
   problemasDoAcidente,
   totalCausasIshikawa,
   type Ishikawa,
+  type LesaoPermanente,
   type SituacaoInvestigacao,
   type TipoAcidente,
 } from '@safetyguard/shared';
@@ -39,12 +43,28 @@ function catPendente(acidente: { catNumero: string | null; data: Date }): boolea
  * Campos Json? do Prisma nao aceitam `null` puro — exigem `Prisma.DbNull`.
  * O schema compartilhado entrega `null` para "limpar"; aqui se traduz.
  */
-function normalizarJson<T extends { ishikawa?: unknown; cincoPorques?: unknown }>(dados: T): T {
+function normalizarJson<T extends { ishikawa?: unknown; cincoPorques?: unknown; lesaoPermanente?: string }>(dados: T): T {
   const saida: Record<string, unknown> = { ...dados };
   for (const campo of ['ishikawa', 'cincoPorques'] as const) {
     if (campo in saida && saida[campo] === null) saida[campo] = Prisma.DbNull;
   }
+  // Dias debitados (NBR 14280) sao DERIVADOS da lesao — nunca digitados.
+  if (typeof saida.lesaoPermanente === 'string') {
+    saida.diasDebitados = DIAS_DEBITADOS[saida.lesaoPermanente as LesaoPermanente] ?? 0;
+  }
   return saida as T;
+}
+
+function rotular<T extends { tipo: string; situacaoInvestigacao: string; lesaoPermanente: string | null; diasAfastamento: number; diasDebitados: number }>(acidente: T) {
+  return {
+    ...acidente,
+    diasComputados: diasComputados(acidente),
+    rotulos: {
+      tipo: ROTULO_TIPO_ACIDENTE[acidente.tipo as TipoAcidente],
+      investigacao: ROTULO_INVESTIGACAO[acidente.situacaoInvestigacao as SituacaoInvestigacao],
+      lesaoPermanente: ROTULO_LESAO_PERMANENTE[(acidente.lesaoPermanente ?? 'NENHUMA') as LesaoPermanente],
+    },
+  };
 }
 
 const filtroSchema = z.object({
@@ -104,13 +124,9 @@ export async function registrarRotasAcidentes(app: FastifyInstance): Promise<voi
     });
 
     return itens.map((acidente) => ({
-      ...acidente,
+      ...rotular(acidente),
       catPendente: catPendente(acidente),
       causasIshikawa: totalCausasIshikawa(acidente.ishikawa as Ishikawa | null),
-      rotulos: {
-        tipo: ROTULO_TIPO_ACIDENTE[acidente.tipo as TipoAcidente],
-        investigacao: ROTULO_INVESTIGACAO[acidente.situacaoInvestigacao as SituacaoInvestigacao],
-      },
     }));
   });
 
@@ -208,18 +224,26 @@ export async function registrarRotasAcidentes(app: FastifyInstance): Promise<voi
     inicio.setMonth(inicio.getMonth() - 12);
     const base: Prisma.AcidenteWhereInput = { ...(clienteId ? { clienteId } : {}), data: { gte: inicio } };
 
-    const [total, comAfastamento, diasPerdidos, investigacoesAbertas, semCat] = await prisma.$transaction([
+    const [total, comAfastamento, dias, investigacoesAbertas, semCat, comLesaoPermanente] = await prisma.$transaction([
       prisma.acidente.count({ where: base }),
       prisma.acidente.count({ where: { ...base, comAfastamento: true } }),
-      prisma.acidente.aggregate({ where: base, _sum: { diasAfastamento: true } }),
+      prisma.acidente.aggregate({ where: base, _sum: { diasAfastamento: true, diasDebitados: true } }),
       prisma.acidente.count({ where: { ...base, situacaoInvestigacao: { not: 'CONCLUIDA' } } }),
       prisma.acidente.findMany({ where: { ...base, catNumero: null }, select: { catNumero: true, data: true } }),
+      prisma.acidente.count({ where: { ...base, diasDebitados: { gt: 0 } } }),
     ]);
+
+    const diasPerdidos = dias._sum.diasAfastamento ?? 0;
+    const diasDebitados = dias._sum.diasDebitados ?? 0;
 
     return {
       ultimos12Meses: total,
       comAfastamento,
-      diasPerdidos: diasPerdidos._sum.diasAfastamento ?? 0,
+      diasPerdidos,
+      /** NBR 14280: morte 6000, perda de membro 3000, visao de um olho 1800. */
+      diasDebitados,
+      diasComputados: diasPerdidos + diasDebitados,
+      comLesaoPermanente,
       investigacoesAbertas,
       catsPendentes: semCat.filter(catPendente).length,
     };
@@ -229,7 +253,7 @@ export async function registrarRotasAcidentes(app: FastifyInstance): Promise<voi
     const { id } = paramsSchema.parse(request.params);
     const acidente = await prisma.acidente.findUnique({ where: { id }, include: COM_VINCULOS });
     if (!acidente) throw new NaoEncontrado('Acidente nao encontrado.', 'ACIDENTE_NAO_ENCONTRADO');
-    return { ...acidente, catPendente: catPendente(acidente) };
+    return { ...rotular(acidente), catPendente: catPendente(acidente) };
   });
 
   app.post('/acidentes', async (request, reply) => {
@@ -250,7 +274,7 @@ export async function registrarRotasAcidentes(app: FastifyInstance): Promise<voi
       return criado;
     });
 
-    return reply.status(201).send(acidente);
+    return reply.status(201).send(rotular(acidente));
   });
 
   app.put('/acidentes/:id', async (request) => {
@@ -300,7 +324,7 @@ export async function registrarRotasAcidentes(app: FastifyInstance): Promise<voi
           contexto: contextoDeAuditoria(request),
         });
       }
-      return { ...acidente, catPendente: catPendente(acidente) };
+      return { ...rotular(acidente), catPendente: catPendente(acidente) };
     });
   });
 

@@ -11,6 +11,9 @@ import { calcularDiferenca, registrarAuditoria, type ContextoAuditoria } from '.
 
 const ENTIDADE = 'Colaborador';
 
+/** Antecedencia do alerta de vencimento do ASO (pedido da operacao: 35 dias). */
+export const DIAS_ALERTA_ASO = 35;
+
 /* -------------------------------------------------------------------------- */
 /* Leitura                                                                     */
 /* -------------------------------------------------------------------------- */
@@ -24,6 +27,7 @@ function montarWhere(filtro: ColaboradorFiltro): Prisma.ColaboradorWhereInput {
   if (filtro.vinculo) where.vinculo = filtro.vinculo;
   if (filtro.grauRisco) where.grauRisco = filtro.grauRisco;
   if (filtro.situacao) where.situacao = filtro.situacao;
+  if (filtro.bloqueado) where.bloqueado = filtro.bloqueado === 'true';
 
   const busca = filtro.busca?.trim();
   if (busca) {
@@ -68,18 +72,51 @@ function comSituacaoDoAso(colaborador: ColaboradorComVinculos, hoje = new Date()
   const [ultimo] = colaborador.asos;
   const { asos: _asos, ...resto } = colaborador;
 
+  const situacaoAso = ultimo ? situacaoDaValidade(ultimo.validade, hoje, DIAS_ALERTA_ASO) : ('SEM_ASO' as const);
+
   return {
     ...resto,
     asoAtual: ultimo ?? null,
-    situacaoAso: ultimo ? situacaoDaValidade(ultimo.validade, hoje) : ('SEM_ASO' as const),
+    situacaoAso,
     diasParaVencerAso: ultimo ? diasAteVencer(ultimo.validade, hoje) : null,
-    /** `true` quando o colaborador nao pode estar em campo. */
-    impedido: !ultimo || situacaoDaValidade(ultimo.validade, hoje) === 'VENCIDO' || ultimo.resultado === 'INAPTO',
+    /** `true` quando o colaborador nao pode estar em campo: sem ASO, vencido, inapto ou bloqueado. */
+    impedido: !ultimo || situacaoAso === 'VENCIDO' || ultimo.resultado === 'INAPTO' || colaborador.bloqueado,
   };
 }
 
+/** Teto de registros avaliados quando o filtro depende do ASO (feito em memoria). */
+const LIMITE_FILTRO_ASO = 5000;
+
 export async function listarColaboradores(filtro: ColaboradorFiltro) {
   const where = montarWhere(filtro);
+  const hoje = new Date();
+  const filtroPorAso = Boolean(filtro.asoIrregular || filtro.situacaoAso);
+
+  /*
+   * A situacao do ASO so existe depois do enriquecimento, entao com esse
+   * filtro a consulta traz todos os que casam com o `where`, filtra em memoria
+   * e SO ENTAO pagina — senao a pagina 1 vinha com menos itens e o total
+   * de paginas era o da lista sem filtro.
+   */
+  if (filtroPorAso) {
+    const todos = await prisma.colaborador.findMany({
+      where,
+      orderBy: { [filtro.ordenarPor]: filtro.direcao },
+      take: LIMITE_FILTRO_ASO,
+      include: COM_VINCULOS,
+    });
+    let enriquecidos = todos.map((item) => comSituacaoDoAso(item, hoje));
+    if (filtro.asoIrregular) enriquecidos = enriquecidos.filter((item) => item.impedido);
+    if (filtro.situacaoAso) enriquecidos = enriquecidos.filter((item) => item.situacaoAso === filtro.situacaoAso);
+    const inicio = (filtro.pagina - 1) * filtro.porPagina;
+    return {
+      itens: enriquecidos.slice(inicio, inicio + filtro.porPagina),
+      total: enriquecidos.length,
+      pagina: filtro.pagina,
+      porPagina: filtro.porPagina,
+      totalPaginas: Math.max(1, Math.ceil(enriquecidos.length / filtro.porPagina)),
+    };
+  }
 
   const [total, itens] = await prisma.$transaction([
     prisma.colaborador.count({ where }),
@@ -92,16 +129,9 @@ export async function listarColaboradores(filtro: ColaboradorFiltro) {
     }),
   ]);
 
-  const hoje = new Date();
-  let enriquecidos = itens.map((item) => comSituacaoDoAso(item, hoje));
-
-  // O filtro de irregularidade depende do ASO, que so existe depois do
-  // enriquecimento — por isso e aplicado aqui, e nao no `where`.
-  if (filtro.asoIrregular) enriquecidos = enriquecidos.filter((item) => item.impedido);
-
   return {
-    itens: enriquecidos,
-    total: filtro.asoIrregular ? enriquecidos.length : total,
+    itens: itens.map((item) => comSituacaoDoAso(item, hoje)),
+    total,
     pagina: filtro.pagina,
     porPagina: filtro.porPagina,
     totalPaginas: Math.max(1, Math.ceil(total / filtro.porPagina)),
@@ -138,13 +168,14 @@ export async function obterColaboradorOuFalhar(id: string) {
 
   const vigentes = colaborador.asos.filter((aso) => aso.tipo !== 'DEMISSIONAL');
   const [ultimo] = vigentes;
+  const situacaoAso = ultimo ? situacaoDaValidade(ultimo.validade, new Date(), DIAS_ALERTA_ASO) : ('SEM_ASO' as const);
 
   return {
     ...colaborador,
     asoAtual: ultimo ?? null,
-    situacaoAso: ultimo ? situacaoDaValidade(ultimo.validade) : ('SEM_ASO' as const),
+    situacaoAso,
     diasParaVencerAso: ultimo ? diasAteVencer(ultimo.validade) : null,
-    impedido: !ultimo || situacaoDaValidade(ultimo.validade) === 'VENCIDO' || ultimo.resultado === 'INAPTO',
+    impedido: !ultimo || situacaoAso === 'VENCIDO' || ultimo.resultado === 'INAPTO' || colaborador.bloqueado,
   };
 }
 

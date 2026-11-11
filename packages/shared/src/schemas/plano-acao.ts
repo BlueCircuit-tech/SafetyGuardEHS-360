@@ -50,6 +50,29 @@ export const ROTULO_STATUS_PLANO: Record<StatusPlano, string> = {
 /** Status que ainda consomem prazo e podem escalonar. */
 export const STATUS_EM_ABERTO: readonly StatusPlano[] = ['ABERTO', 'EM_ANDAMENTO'];
 
+/**
+ * Carencia, em dias apos o prazo, para cobrar a chefia hierarquica do
+ * cliente por e-mail quando a pendencia nao foi tratada — regra pedida pela
+ * operacao: 10 dias para ALTA, 20 para MEDIA, 30 para BAIXA. CRITICA segue a
+ * mais curta.
+ */
+export const CARENCIA_COBRANCA_CHEFIA_DIAS: Record<CriticidadePlano, number> = {
+  CRITICA: 10,
+  ALTA: 10,
+  MEDIA: 20,
+  BAIXA: 30,
+};
+
+/** `true` quando o plano em aberto ja passou do prazo + carencia e ainda nao foi cobrado. */
+export function deveCobrarChefia(
+  plano: { status: StatusPlano; criticidade: CriticidadePlano; prazo: Date; cobrancaChefiaEm: Date | null },
+  agora = new Date(),
+): boolean {
+  if (!estaEmAberto(plano.status) || plano.cobrancaChefiaEm) return false;
+  const limite = plano.prazo.getTime() + CARENCIA_COBRANCA_CHEFIA_DIAS[plano.criticidade] * 24 * 60 * 60 * 1000;
+  return agora.getTime() >= limite;
+}
+
 export function estaEmAberto(status: StatusPlano): boolean {
   return STATUS_EM_ABERTO.includes(status);
 }
@@ -102,6 +125,8 @@ const planoAcaoBaseSchema = z.object({
   dataConclusao: dataOpcional('Data de conclusao'),
   /** Evidencia da correcao — exigida para concluir. */
   evidenciaUrl: opcional(z.string().trim().max(300)),
+  /** Foto da situacao encontrada (o "antes"). */
+  fotoInicialUrl: opcional(z.string().trim().max(300)),
   comentarioConclusao: opcional(z.string().trim().max(1000)),
   observacoes: opcional(z.string().trim().max(1000)),
 });

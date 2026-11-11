@@ -234,6 +234,74 @@ export const clienteFiltroSchema = z.object({
 export type ClienteFiltro = z.output<typeof clienteFiltroSchema>;
 
 /* -------------------------------------------------------------------------- */
+/* Contatos hierarquicos                                                       */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Niveis de contato do cliente. Os mesmos papeis da matriz de comunicacao
+ * (SUPERVISOR, COORDENADOR, GERENTE...) mais os de apoio (RH, Compras).
+ * E o que liga o "escalonar para o gerente" a um e-mail de verdade.
+ */
+export const NIVEIS_CONTATO_CLIENTE = [
+  'SUPERVISOR',
+  'COORDENADOR',
+  'GERENTE',
+  'GERENCIA_CORPORATIVA',
+  'DIRETORIA',
+  'SSMA',
+  'MEIO_AMBIENTE',
+  'MANUTENCAO',
+  'RESPONSAVEL_TECNICO',
+  'BRIGADA',
+  'PRODUCAO',
+  'UTILIDADES',
+  'RH',
+  'COMPRAS',
+  'OUTRO',
+] as const;
+export type NivelContatoCliente = (typeof NIVEIS_CONTATO_CLIENTE)[number];
+
+export const ROTULO_NIVEL_CONTATO: Record<NivelContatoCliente, string> = {
+  SUPERVISOR: 'Supervisor',
+  COORDENADOR: 'Coordenador',
+  GERENTE: 'Gerente',
+  GERENCIA_CORPORATIVA: 'Gerencia corporativa',
+  DIRETORIA: 'Diretoria',
+  SSMA: 'SSMA / Seguranca',
+  MEIO_AMBIENTE: 'Meio ambiente',
+  MANUTENCAO: 'Manutencao',
+  RESPONSAVEL_TECNICO: 'Responsavel tecnico da area',
+  BRIGADA: 'Brigada',
+  PRODUCAO: 'Producao',
+  UTILIDADES: 'Utilidades',
+  RH: 'Recursos humanos',
+  COMPRAS: 'Compras',
+  OUTRO: 'Outro',
+};
+
+/** Ordem da cadeia hierarquica usada na cobranca de pendencias. */
+export const CADEIA_HIERARQUICA: readonly NivelContatoCliente[] = [
+  'SUPERVISOR',
+  'COORDENADOR',
+  'GERENTE',
+  'GERENCIA_CORPORATIVA',
+  'DIRETORIA',
+];
+
+export const contatoClienteCreateSchema = z.object({
+  nome: texto(3, 120, 'Nome do contato'),
+  cargo: opcional(z.string().trim().max(80)),
+  nivel: z.enum(NIVEIS_CONTATO_CLIENTE, { required_error: 'Informe o nivel do contato.' }),
+  email: z.string({ required_error: 'E-mail e obrigatorio.' }).trim().toLowerCase().email('E-mail invalido.').max(150),
+  telefone: opcional(z.string().transform(limparTelefone).refine(isTelefoneValido, 'Telefone invalido.')),
+  whatsapp: opcional(z.string().transform(limparTelefone).refine(isCelular, 'WhatsApp deve ser um celular valido com DDD.')),
+  recebeAlertas: z.boolean().default(true),
+  observacoes: opcional(z.string().trim().max(300)),
+});
+export const contatoClienteUpdateSchema = contatoClienteCreateSchema.partial();
+export type ContatoClienteCreateData = z.output<typeof contatoClienteCreateSchema>;
+
+/* -------------------------------------------------------------------------- */
 /* Formulario                                                                  */
 /* -------------------------------------------------------------------------- */
 

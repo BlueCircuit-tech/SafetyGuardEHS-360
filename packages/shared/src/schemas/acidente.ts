@@ -32,6 +32,109 @@ export const ROTULO_INVESTIGACAO: Record<SituacaoInvestigacao, string> = {
 export const PRAZO_CAT_DIAS_UTEIS = 1;
 
 /* -------------------------------------------------------------------------- */
+/* Partes do corpo (diagrama anatomico) e dias debitados (NBR 14280)          */
+/* -------------------------------------------------------------------------- */
+
+/** Regioes do diagrama anatomico, vista anterior e posterior. */
+export const PARTES_CORPO = [
+  'CABECA',
+  'OLHOS',
+  'PESCOCO',
+  'OMBROS',
+  'TORAX',
+  'ABDOMEN',
+  'REGIAO_PELVICA',
+  'BRACOS',
+  'COTOVELOS',
+  'PULSOS',
+  'MAOS',
+  'COXAS',
+  'JOELHOS',
+  'PERNAS',
+  'TORNOZELOS',
+  'PES',
+  'COSTAS',
+  'OMOPLATAS',
+  'COLUNA_VERTEBRAL',
+  'REGIAO_LOMBAR',
+  'GLUTEOS',
+  'MULTIPLAS',
+] as const;
+export type ParteCorpo = (typeof PARTES_CORPO)[number];
+
+export const ROTULO_PARTE_CORPO: Record<ParteCorpo, string> = {
+  CABECA: 'Cabeca',
+  OLHOS: 'Olhos',
+  PESCOCO: 'Pescoco',
+  OMBROS: 'Ombros',
+  TORAX: 'Torax',
+  ABDOMEN: 'Abdomen',
+  REGIAO_PELVICA: 'Regiao pelvica',
+  BRACOS: 'Bracos',
+  COTOVELOS: 'Cotovelos',
+  PULSOS: 'Pulsos',
+  MAOS: 'Maos',
+  COXAS: 'Coxas',
+  JOELHOS: 'Joelhos',
+  PERNAS: 'Pernas',
+  TORNOZELOS: 'Tornozelos',
+  PES: 'Pes',
+  COSTAS: 'Costas',
+  OMOPLATAS: 'Omoplatas',
+  COLUNA_VERTEBRAL: 'Coluna vertebral',
+  REGIAO_LOMBAR: 'Regiao lombar',
+  GLUTEOS: 'Gluteos',
+  MULTIPLAS: 'Multiplas regioes',
+};
+
+/**
+ * Lesoes com dias DEBITADOS (NBR 14280, tabela de incapacidade permanente).
+ * O numero entra na estatistica de dias perdidos mesmo sem afastamento
+ * proporcional — e o que a operacao pediu: "morte 6000, perda de membro
+ * 3000, perda de visao de um olho 1800". A tabela completa da norma tem
+ * mais linhas; estas sao as adotadas pela consultoria.
+ */
+export const LESOES_PERMANENTES = [
+  'NENHUMA',
+  'MORTE',
+  'INCAPACIDADE_PERMANENTE_TOTAL',
+  'PERDA_MEMBRO',
+  'PERDA_VISAO_UM_OLHO',
+  'PERDA_VISAO_DOIS_OLHOS',
+  'PERDA_AUDICAO_UM_OUVIDO',
+  'PERDA_AUDICAO_DOIS_OUVIDOS',
+] as const;
+export type LesaoPermanente = (typeof LESOES_PERMANENTES)[number];
+
+export const ROTULO_LESAO_PERMANENTE: Record<LesaoPermanente, string> = {
+  NENHUMA: 'Sem lesao permanente',
+  MORTE: 'Morte',
+  INCAPACIDADE_PERMANENTE_TOTAL: 'Incapacidade permanente total',
+  PERDA_MEMBRO: 'Perda de membro (mao, braco, pe ou perna)',
+  PERDA_VISAO_UM_OLHO: 'Perda da visao de um olho',
+  PERDA_VISAO_DOIS_OLHOS: 'Perda da visao dos dois olhos',
+  PERDA_AUDICAO_UM_OUVIDO: 'Perda da audicao de um ouvido',
+  PERDA_AUDICAO_DOIS_OUVIDOS: 'Perda da audicao dos dois ouvidos',
+};
+
+/** Dias debitados por lesao (NBR 14280). */
+export const DIAS_DEBITADOS: Record<LesaoPermanente, number> = {
+  NENHUMA: 0,
+  MORTE: 6000,
+  INCAPACIDADE_PERMANENTE_TOTAL: 6000,
+  PERDA_MEMBRO: 3000,
+  PERDA_VISAO_UM_OLHO: 1800,
+  PERDA_VISAO_DOIS_OLHOS: 6000,
+  PERDA_AUDICAO_UM_OUVIDO: 600,
+  PERDA_AUDICAO_DOIS_OUVIDOS: 3000,
+};
+
+/** Dias computados = dias de afastamento + dias debitados. */
+export function diasComputados(acidente: { diasAfastamento?: number | null; diasDebitados?: number | null }): number {
+  return (acidente.diasAfastamento ?? 0) + (acidente.diasDebitados ?? 0);
+}
+
+/* -------------------------------------------------------------------------- */
 /* Investigacao estruturada: Ishikawa (6M) e 5 Porques                        */
 /* -------------------------------------------------------------------------- */
 
@@ -105,9 +208,12 @@ const acidenteBaseSchema = z.object({
   data: dataNaoFutura('Data do acidente'),
   tipo: z.enum(TIPOS_ACIDENTE, { required_error: 'Informe o tipo do acidente.' }),
   descricao: texto(10, 2000, 'Descricao do acidente'),
-  parteCorpoAtingida: opcional(z.string().trim().max(120)),
+  /** Regioes marcadas no diagrama, separadas por "; ". */
+  parteCorpoAtingida: opcional(z.string().trim().max(300)),
   comAfastamento: z.boolean().default(false),
   diasAfastamento: z.coerce.number().int().min(0).max(10000).default(0),
+  /** Lesao permanente — define os dias debitados (calculados no servidor). */
+  lesaoPermanente: z.enum(LESOES_PERMANENTES).default('NENHUMA'),
 
   /* --- CAT ---------------------------------------------------------------- */
   catNumero: opcional(z.string().trim().max(40)),

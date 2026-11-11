@@ -5,6 +5,7 @@ import {
   matrizFiltroSchema,
   realizacaoCreateSchema,
   requisitoCreateSchema,
+  requisitosLoteSchema,
   treinamentoCreateSchema,
   treinamentoUpdateSchema,
 } from '@safetyguard/shared';
@@ -26,6 +27,7 @@ import {
 import { MIMES_DOCUMENTO_ACEITOS, removerArquivoPublico, salvarDocumento } from '../../lib/arquivos.js';
 import { RequisicaoInvalida } from '../../lib/erros.js';
 import { contextoDeAuditoria } from '../../lib/autenticacao.js';
+import { Conflito } from '../../lib/erros.js';
 import { guardaPorMetodo } from '../../lib/guarda.js';
 import { uploadMaxBytes } from '../../env.js';
 import { prisma } from '../../db.js';
@@ -91,6 +93,22 @@ export async function registrarRotasTreinamentos(app: FastifyInstance): Promise<
   app.post('/capacitacao/requisitos', async (request, reply) => {
     const dados = requisitoCreateSchema.parse(request.body);
     return reply.status(201).send(await criarRequisito(dados, contextoDeAuditoria(request)));
+  });
+
+  /** Varios treinamentos para a mesma funcao de uma vez; os ja existentes sao ignorados. */
+  app.post('/capacitacao/requisitos/lote', async (request, reply) => {
+    const dados = requisitosLoteSchema.parse(request.body);
+    const criados: unknown[] = [];
+    let ignorados = 0;
+    for (const treinamentoId of [...new Set(dados.treinamentoIds)]) {
+      try {
+        criados.push(await criarRequisito({ funcao: dados.funcao, treinamentoId }, contextoDeAuditoria(request)));
+      } catch (erro) {
+        if (erro instanceof Conflito) ignorados += 1;
+        else throw erro;
+      }
+    }
+    return reply.status(201).send({ criados: criados.length, ignorados, itens: criados });
   });
 
   app.delete('/capacitacao/requisitos/:id', async (request, reply) => {

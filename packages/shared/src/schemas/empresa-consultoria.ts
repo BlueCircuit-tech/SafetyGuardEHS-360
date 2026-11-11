@@ -131,6 +131,10 @@ export const empresaConsultoriaCreateSchema = z.object({
 
   /* --- Identidade visual e textos institucionais ------------------------- */
   logoUrl: opcional(z.string().trim().max(300)),
+  /** Texto padrao impresso em toda Ordem de Servico (orientacoes gerais). */
+  textoPadraoOs: opcional(z.string().trim().max(5000)),
+  /** Link da plataforma de treinamentos da consultoria. */
+  urlPlataformaTreinamentos: opcional(z.string().trim().url('Informe uma URL valida (https://...).').max(300)),
   corPrimaria: z
     .string()
     .trim()

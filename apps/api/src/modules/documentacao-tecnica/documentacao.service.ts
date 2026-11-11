@@ -8,7 +8,7 @@ import {
   type OsTreinamento,
 } from '@safetyguard/shared';
 import { prisma } from '../../db.js';
-import { carimbar } from '../../lib/assinatura.js';
+import { carimbar, verificarCarimbo } from '../../lib/assinatura.js';
 import { registrarAuditoria, type ContextoAuditoria } from '../../lib/auditoria.js';
 import { NaoEncontrado, RequisicaoInvalida } from '../../lib/erros.js';
 
@@ -271,6 +271,54 @@ export async function registrarCienciaOs(id: string, assinaturaUrl: string, assi
   });
 }
 
+/** Edicao do texto complementar enquanto a OS aguarda ciencia. */
+export async function atualizarOrdemServico(id: string, dados: { medidasPreventivas?: string | null }, contexto: ContextoAuditoria = {}) {
+  const atual = await obterOrdemServicoOuFalhar(id);
+  if (atual.situacao !== 'EMITIDA') {
+    throw new RequisicaoInvalida('So uma OS emitida (ainda sem ciencia) pode ser editada — gere uma nova versao.', 'OS_NAO_EDITAVEL');
+  }
+  return prisma.$transaction(async (tx) => {
+    const os = await tx.ordemServico.update({ where: { id }, data: { medidasPreventivas: dados.medidasPreventivas ?? null }, include: OS_COM_VINCULOS });
+    await registrarAuditoria(tx, {
+      entidade: 'OrdemServico',
+      entidadeId: id,
+      acao: 'ATUALIZACAO',
+      alteracoes: { medidasPreventivas: { de: atual.medidasPreventivas, para: os.medidasPreventivas } },
+      contexto,
+    });
+    return os;
+  });
+}
+
+/** Copia assinada em papel (PDF/imagem) anexada a OS. */
+export async function definirArquivoAssinadoOs(id: string, url: string) {
+  await obterOrdemServicoOuFalhar(id);
+  return prisma.ordemServico.update({ where: { id }, data: { arquivoAssinadoUrl: url }, include: OS_COM_VINCULOS });
+}
+
+/** Verificacao da ciencia carimbada: precisa dos bytes da assinatura, que ficam na URL gravada. */
+export async function verificarCienciaOs(id: string, assinatura: Buffer | null) {
+  const os = await obterOrdemServicoOuFalhar(id);
+  if (!os.cienciaHash || !os.cienciaEm) {
+    return { carimbada: false, valida: null, mensagem: 'Esta OS ainda nao tem ciencia registrada.' };
+  }
+  if (!assinatura) {
+    return { carimbada: true, valida: null, hash: os.cienciaHash, cienciaEm: os.cienciaEm, mensagem: 'Carimbo registrado; a imagem da assinatura nao pode ser lida para recalcular o hash.' };
+  }
+  const valida = verificarCarimbo(os.cienciaHash, {
+    conteudo: Buffer.concat([assinatura, Buffer.from(JSON.stringify({ riscos: os.riscos, epis: os.episObrigatorios, treinamentos: os.treinamentosExigidos }))]),
+    signatario: os.colaborador.nome,
+    momento: os.cienciaEm,
+  });
+  return {
+    carimbada: true,
+    valida,
+    hash: os.cienciaHash,
+    cienciaEm: os.cienciaEm,
+    mensagem: valida ? 'Carimbo valido: assinatura e conteudo conferem.' : 'Carimbo INVALIDO: assinatura ou conteudo alterados depois da ciencia.',
+  };
+}
+
 /* -------------------------------------------------------------------------- */
 /* APR                                                                         */
 /* -------------------------------------------------------------------------- */
@@ -332,6 +380,8 @@ export async function criarApr(
     dataFim?: Date | null;
     responsavel: string;
     etapas: AprEtapa[];
+    modelo?: string;
+    tiposServico?: string[];
   },
   contexto: ContextoAuditoria = {},
 ) {
@@ -344,6 +394,7 @@ export async function criarApr(
         ...dados,
         codigo: await proximoCodigo(tx, 'apr', 'APR'),
         etapas: dados.etapas as unknown as Prisma.InputJsonValue,
+        tiposServico: (dados.tiposServico ?? []) as unknown as Prisma.InputJsonValue,
       },
       include: APR_COM_VINCULOS,
     });
@@ -371,6 +422,7 @@ export async function atualizarApr(id: string, dados: Record<string, unknown>, c
 
   const data: Prisma.AprUncheckedUpdateInput = { ...(dados as Prisma.AprUncheckedUpdateInput) };
   if (dados.etapas) data.etapas = dados.etapas as Prisma.InputJsonValue;
+  if (dados.tiposServico) data.tiposServico = dados.tiposServico as Prisma.InputJsonValue;
 
   return prisma.$transaction(async (tx) => {
     const apr = await tx.apr.update({ where: { id }, data, include: APR_COM_VINCULOS });
@@ -385,6 +437,14 @@ export async function atualizarApr(id: string, dados: Record<string, unknown>, c
   });
 }
 
+/**
+ * O que o carimbo da APR protege: etapas, atividade, local e tipos de
+ * servico. Mudar qualquer um depois da aprovacao invalida a verificacao.
+ */
+function conteudoCarimbadoDaApr(apr: { etapas: unknown; atividade: string; local: string | null; tiposServico: unknown; modelo: string }) {
+  return { etapas: apr.etapas, atividade: apr.atividade, local: apr.local, tiposServico: apr.tiposServico ?? [], modelo: apr.modelo };
+}
+
 /** Aprovar congela o conteudo e o carimba. */
 export async function aprovarApr(id: string, aprovadaPor: string, contexto: ContextoAuditoria = {}) {
   const atual = await obterAprOuFalhar(id);
@@ -393,7 +453,7 @@ export async function aprovarApr(id: string, aprovadaPor: string, contexto: Cont
   }
 
   const em = new Date();
-  const hash = carimbar({ conteudo: atual.etapas as object, signatario: aprovadaPor, momento: em });
+  const hash = carimbar({ conteudo: conteudoCarimbadoDaApr(atual), signatario: aprovadaPor, momento: em });
 
   return prisma.$transaction(async (tx) => {
     const apr = await tx.apr.update({
@@ -427,11 +487,13 @@ export async function novaVersaoApr(id: string, contexto: ContextoAuditoria = {}
         terceiroId: anterior.terceiroId,
         codigo: anterior.codigo,
         versao: anterior.versao + 1,
+        modelo: anterior.modelo,
         atividade: anterior.atividade,
         local: anterior.local,
         dataInicio: anterior.dataInicio,
         dataFim: anterior.dataFim,
         responsavel: anterior.responsavel,
+        tiposServico: (anterior.tiposServico ?? []) as Prisma.InputJsonValue,
         etapas: anterior.etapas as Prisma.InputJsonValue,
         situacao: 'RASCUNHO',
       },
@@ -466,6 +528,55 @@ export async function encerrarApr(id: string, contexto: ContextoAuditoria = {}) 
 export async function definirArquivoApr(id: string, url: string) {
   await obterAprOuFalhar(id);
   return prisma.apr.update({ where: { id }, data: { arquivoUrl: url }, include: APR_COM_VINCULOS });
+}
+
+/**
+ * Excluir uma APR. Aprovada nao se apaga — e um documento carimbado; encerre
+ * primeiro. Rascunho e encerrada podem ser removidos (com auditoria).
+ */
+export async function excluirApr(id: string, contexto: ContextoAuditoria = {}): Promise<{ arquivoUrl: string | null }> {
+  const atual = await obterAprOuFalhar(id);
+  if (atual.situacao === 'APROVADA') {
+    throw new RequisicaoInvalida('APR aprovada nao pode ser excluida — encerre-a primeiro.', 'APR_APROVADA');
+  }
+  await prisma.$transaction(async (tx) => {
+    await tx.apr.delete({ where: { id } });
+    await registrarAuditoria(tx, {
+      entidade: 'Apr',
+      entidadeId: id,
+      acao: 'EXCLUSAO',
+      alteracoes: { codigo: { de: `${atual.codigo} v${atual.versao}`, para: null }, atividade: { de: atual.atividade, para: null } },
+      contexto,
+    });
+  });
+  return { arquivoUrl: atual.arquivoUrl };
+}
+
+/**
+ * Verificacao de autenticidade do carimbo da APR: recalcula o hash com os
+ * insumos gravados (etapas, aprovador, momento) e compara com o registrado.
+ * Qualquer alteracao posterior no conteudo invalida.
+ */
+export async function verificarApr(id: string) {
+  const apr = await obterAprOuFalhar(id);
+  if (!apr.aprovacaoHash || !apr.aprovadaPor || !apr.aprovadaEm) {
+    return { carimbada: false, valida: null, mensagem: 'Esta APR ainda nao foi aprovada — nao ha carimbo para conferir.' };
+  }
+  // Carimbos novos cobrem etapas + atividade + local + tipos de servico; os
+  // emitidos antes desta versao cobriam so as etapas e continuam verificaveis.
+  const valida =
+    verificarCarimbo(apr.aprovacaoHash, { conteudo: conteudoCarimbadoDaApr(apr), signatario: apr.aprovadaPor, momento: apr.aprovadaEm }) ||
+    verificarCarimbo(apr.aprovacaoHash, { conteudo: apr.etapas as object, signatario: apr.aprovadaPor, momento: apr.aprovadaEm });
+  return {
+    carimbada: true,
+    valida,
+    hash: apr.aprovacaoHash,
+    aprovadaPor: apr.aprovadaPor,
+    aprovadaEm: apr.aprovadaEm,
+    mensagem: valida
+      ? 'Carimbo valido: etapas, atividade, local, tipos de servico, aprovador e momento conferem com o hash registrado.'
+      : 'Carimbo INVALIDO: o conteudo foi alterado depois da aprovacao ou o registro foi adulterado.',
+  };
 }
 
 /* -------------------------------------------------------------------------- */

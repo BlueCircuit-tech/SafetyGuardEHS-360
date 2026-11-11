@@ -15,6 +15,7 @@ import { NaoEncontrado } from '../../lib/erros.js';
 import { calcularDiferenca, registrarAuditoria } from '../../lib/auditoria.js';
 import { contextoDeAuditoria } from '../../lib/autenticacao.js';
 import { guardaPorMetodo } from '../../lib/guarda.js';
+import { avisarHierarquiaSobreConsequencia } from '../planos/notificacao.service.js';
 
 const ENTIDADE = 'Consequencia';
 const paramsSchema = z.object({ id: z.string().uuid('Identificador invalido.') });
@@ -116,7 +117,7 @@ export async function registrarRotasConsequencias(app: FastifyInstance): Promise
 
     const colaborador = await prisma.colaborador.findUnique({
       where: { id: dados.colaboradorId },
-      select: { id: true },
+      select: { id: true, nome: true, funcao: true, clienteId: true, cliente: { select: { nomeFantasia: true } } },
     });
     if (!colaborador) throw new NaoEncontrado('Colaborador nao encontrado.', 'COLABORADOR_NAO_ENCONTRADO');
 
@@ -132,7 +133,86 @@ export async function registrarRotasConsequencias(app: FastifyInstance): Promise
       return criado;
     });
 
-    return reply.status(201).send(registro);
+    /*
+     * Aviso aos niveis hierarquicos do cliente (pedido da operacao). Fora da
+     * transacao e sem bloquear a resposta: falha de e-mail nao desfaz o
+     * registro, so fica no log.
+     */
+    const aviso = await avisarHierarquiaSobreConsequencia({
+      clienteId: colaborador.clienteId,
+      cliente: colaborador.cliente.nomeFantasia,
+      colaborador: `${colaborador.nome} — ${colaborador.funcao}`,
+      medida: ROTULO_MEDIDA[dados.medida as MedidaDisciplinar],
+      comportamento: dados.comportamento,
+      data: dados.data,
+      liderNome: dados.liderNome,
+    });
+
+    return reply.status(201).send({ ...registro, aviso });
+  });
+
+  /**
+   * Relatorio mensal/anual por empresa (pedido da operacao): registros,
+   * medidas aplicadas, reincidentes e lista nominal do periodo.
+   */
+  app.get('/consequencias/relatorio', async (request) => {
+    const { clienteId, ano, mes } = z
+      .object({
+        clienteId: z.string().uuid().optional(),
+        ano: z.coerce.number().int().min(2000).max(2100).default(new Date().getFullYear()),
+        mes: z.coerce.number().int().min(1).max(12).optional(),
+      })
+      .parse(request.query);
+
+    const inicio = mes ? new Date(ano, mes - 1, 1) : new Date(ano, 0, 1);
+    const fim = mes ? new Date(ano, mes, 1) : new Date(ano + 1, 0, 1);
+    const where: Prisma.ConsequenciaWhereInput = {
+      data: { gte: inicio, lt: fim },
+      ...(clienteId ? { colaborador: { clienteId } } : {}),
+    };
+
+    const itens = await prisma.consequencia.findMany({ where, orderBy: { data: 'asc' }, include: COM_VINCULOS });
+
+    const porMedida = new Map<string, number>();
+    const porMotivacao = new Map<string, number>();
+    const porColaborador = new Map<string, { nome: string; funcao: string; cliente: string; registros: number }>();
+    const porMes = new Map<string, number>();
+    const porCliente = new Map<string, number>();
+
+    for (const item of itens) {
+      porMedida.set(item.medida, (porMedida.get(item.medida) ?? 0) + 1);
+      porMotivacao.set(item.motivacao, (porMotivacao.get(item.motivacao) ?? 0) + 1);
+      const chaveMes = item.data.toISOString().slice(0, 7);
+      porMes.set(chaveMes, (porMes.get(chaveMes) ?? 0) + 1);
+      const cliente = item.colaborador.cliente?.nomeFantasia ?? '—';
+      porCliente.set(cliente, (porCliente.get(cliente) ?? 0) + 1);
+      const c = porColaborador.get(item.colaboradorId) ?? { nome: item.colaborador.nome, funcao: item.colaborador.funcao, cliente, registros: 0 };
+      c.registros += 1;
+      porColaborador.set(item.colaboradorId, c);
+    }
+
+    return {
+      periodo: { ano, mes: mes ?? null, inicio, fim },
+      total: itens.length,
+      colaboradoresEnvolvidos: porColaborador.size,
+      reincidentes: [...porColaborador.values()].filter((c) => c.registros > 1).length,
+      porMedida: [...porMedida.entries()].map(([medida, quantidade]) => ({ medida, rotulo: ROTULO_MEDIDA[medida as MedidaDisciplinar], quantidade })),
+      porMotivacao: [...porMotivacao.entries()].map(([motivacao, quantidade]) => ({ motivacao, rotulo: ROTULO_MOTIVACAO[motivacao as MotivacaoConsequencia], quantidade })),
+      porMes: [...porMes.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([mes, quantidade]) => ({ mes, quantidade })),
+      porCliente: [...porCliente.entries()].map(([cliente, quantidade]) => ({ cliente, quantidade })),
+      porColaborador: [...porColaborador.values()].sort((a, b) => b.registros - a.registros),
+      itens: itens.map((item) => ({
+        id: item.id,
+        data: item.data,
+        colaborador: item.colaborador.nome,
+        funcao: item.colaborador.funcao,
+        cliente: item.colaborador.cliente?.nomeFantasia ?? '—',
+        lider: item.liderNome,
+        comportamento: item.comportamento,
+        medida: ROTULO_MEDIDA[item.medida as MedidaDisciplinar],
+        motivacao: ROTULO_MOTIVACAO[item.motivacao as MotivacaoConsequencia],
+      })),
+    };
   });
 
   app.put('/consequencias/:id', async (request) => {

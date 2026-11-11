@@ -14,6 +14,144 @@ import { obterEmpresaOuFalhar } from '../empresa/empresa.service.js';
 import { enviarEmail } from '../../lib/email.js';
 import { env } from '../../env.js';
 
+/* -------------------------------------------------------------------------- */
+/* Destinatarios reais: contatos hierarquicos do cliente                       */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Resolve os papeis da matriz (SUPERVISOR, GERENTE...) nas pessoas cadastradas
+ * em "Contatos" do cliente. E o que faz "escalar para o gerente" chegar a um
+ * e-mail de verdade. Sem contato no nivel, o papel fica so registrado.
+ */
+export async function emailsDosContatos(clienteId: string, niveis: readonly string[]): Promise<string[]> {
+  if (niveis.length === 0) return [];
+  const contatos = await prisma.contatoCliente.findMany({
+    where: { clienteId, recebeAlertas: true, nivel: { in: [...niveis] } },
+    select: { email: true },
+  });
+  return [...new Set(contatos.map((c) => c.email.toLowerCase()))];
+}
+
+function emailsDeCopia(): string[] {
+  return (env.ALERTA_EMAIL_COPIA ?? '')
+    .split(',')
+    .map((e) => e.trim())
+    .filter(Boolean);
+}
+
+/**
+ * Aviso aos niveis hierarquicos quando uma medida disciplinar e registrada
+ * (gestao de consequencias). Nunca lanca.
+ */
+export async function avisarHierarquiaSobreConsequencia(dados: {
+  clienteId: string;
+  cliente: string;
+  colaborador: string;
+  medida: string;
+  comportamento: string;
+  data: Date;
+  liderNome: string;
+}): Promise<{ enviado: boolean; destinatarios: number; motivo?: string }> {
+  try {
+    const para = new Set<string>([
+      ...(await emailsDosContatos(dados.clienteId, ['SUPERVISOR', 'COORDENADOR', 'GERENTE', 'SSMA', 'RH'])),
+      ...emailsDeCopia(),
+    ]);
+    if (para.size === 0) return { enviado: false, destinatarios: 0, motivo: 'Nenhum contato hierarquico com e-mail cadastrado no cliente.' };
+
+    const empresa = await obterEmpresaOuFalhar();
+    const cabecalho = montarCabecalhoInstitucional(empresa);
+    const corpo = [
+      `${cabecalho.nomeExibicao} — Gestao de Consequencias`,
+      '',
+      `Cliente: ${dados.cliente}`,
+      `Colaborador: ${dados.colaborador}`,
+      `Data do fato: ${dados.data.toLocaleDateString('pt-BR')}`,
+      `Comportamento de risco: ${dados.comportamento}`,
+      `Medida aplicada: ${dados.medida}`,
+      `Lider direto: ${dados.liderNome}`,
+      '',
+      'Este aviso e gerado automaticamente pela plataforma para conhecimento dos niveis hierarquicos. O registro completo esta na tela Gestao de Consequencias.',
+      '',
+      cabecalho.assinaturaEmail,
+    ].join('\n');
+
+    await enviarEmail({ para: [...para], assunto: `[SSMA] Medida disciplinar registrada — ${dados.cliente}`, corpo });
+    return { enviado: true, destinatarios: para.size };
+  } catch (erro) {
+    const motivo = erro instanceof Error ? erro.message : String(erro);
+    console.error(`[email] aviso de consequencia falhou: ${motivo}`);
+    return { enviado: false, destinatarios: 0, motivo };
+  }
+}
+
+/**
+ * Cobranca da chefia: plano em aberto que passou do prazo + carencia da
+ * criticidade (10/20/30 dias). Vai para TODA a cadeia hierarquica do cliente
+ * (supervisor ate diretoria) mais o responsavel do plano. Nunca lanca.
+ */
+export async function cobrarChefiaPorPlano(plano: {
+  id: string;
+  codigo: string;
+  acao: string;
+  criticidade: string;
+  prazo: Date;
+  responsavelNome: string;
+  responsavelEmail: string | null;
+  clienteId: string;
+  cliente: string;
+  area: string | null;
+  diasAtraso: number;
+}): Promise<{ enviado: boolean; destinatarios: number; motivo?: string }> {
+  try {
+    const para = new Set<string>([
+      ...(await emailsDosContatos(plano.clienteId, ['SUPERVISOR', 'COORDENADOR', 'GERENTE', 'GERENCIA_CORPORATIVA', 'DIRETORIA', 'SSMA'])),
+      ...emailsDeCopia(),
+    ]);
+    if (plano.responsavelEmail) para.add(plano.responsavelEmail.toLowerCase());
+    if (para.size === 0) return { enviado: false, destinatarios: 0, motivo: 'Nenhum contato hierarquico com e-mail cadastrado no cliente.' };
+
+    const empresa = await obterEmpresaOuFalhar();
+    const cabecalho = montarCabecalhoInstitucional(empresa);
+    const assunto = `[SSMA] Pendencia nao tratada ha ${plano.diasAtraso} dias — ${plano.codigo} (${plano.cliente})`;
+    const corpo = [
+      `${cabecalho.nomeExibicao} — Cobranca de pendencia`,
+      '',
+      `Plano de acao: ${plano.codigo} — ${plano.acao}`,
+      `Cliente: ${plano.cliente}${plano.area ? ` · Area: ${plano.area}` : ''}`,
+      `Criticidade: ${plano.criticidade}`,
+      `Prazo original: ${plano.prazo.toLocaleDateString('pt-BR')} (vencido ha ${plano.diasAtraso} dias)`,
+      `Responsavel: ${plano.responsavelNome}`,
+      '',
+      'A pendencia ultrapassou a carencia definida para a criticidade (10 dias ALTA, 20 dias MEDIA, 30 dias BAIXA) sem tratativa registrada. Pedimos a intervencao da chefia para destravar a acao ou reprogramar o prazo com justificativa.',
+      '',
+      cabecalho.assinaturaEmail,
+    ].join('\n');
+
+    await enviarEmail({ para: [...para], assunto, corpo });
+
+    await prisma.notificacao.create({
+      data: {
+        clienteId: plano.clienteId,
+        planoAcaoId: plano.id,
+        canal: 'EMAIL',
+        destinatarios: 'SUPERVISOR,COORDENADOR,GERENTE,GERENCIA_CORPORATIVA,DIRETORIA',
+        assunto,
+        corpo,
+        nivelEscalonamento: 9,
+        prioridade: 'ALTA',
+        status: 'ENVIADA',
+      },
+    });
+
+    return { enviado: true, destinatarios: para.size };
+  } catch (erro) {
+    const motivo = erro instanceof Error ? erro.message : String(erro);
+    console.error(`[email] cobranca da chefia falhou (${plano.codigo}): ${motivo}`);
+    return { enviado: false, destinatarios: 0, motivo };
+  }
+}
+
 type ClientePrisma = PrismaClient | Prisma.TransactionClient;
 
 /**
@@ -191,6 +329,8 @@ export async function despacharEmails(ids: string[]): Promise<{ enviadas: number
       id: true,
       assunto: true,
       corpo: true,
+      clienteId: true,
+      destinatarios: true,
       planoAcao: { select: { responsavelEmail: true } },
     },
   });
@@ -201,9 +341,11 @@ export async function despacharEmails(ids: string[]): Promise<{ enviadas: number
   for (const n of pendentes) {
     const para = new Set<string>();
     if (n.planoAcao?.responsavelEmail) para.add(n.planoAcao.responsavelEmail);
-    for (const email of (env.ALERTA_EMAIL_COPIA ?? '').split(',').map((e) => e.trim())) {
-      if (email) para.add(email);
+    // Papeis da matriz -> pessoas: contatos hierarquicos cadastrados no cliente.
+    for (const email of await emailsDosContatos(n.clienteId, n.destinatarios.split(',').map((d) => d.trim()).filter(Boolean))) {
+      para.add(email);
     }
+    for (const email of emailsDeCopia()) para.add(email);
     if (para.size === 0 || !n.assunto || !n.corpo) continue;
 
     try {

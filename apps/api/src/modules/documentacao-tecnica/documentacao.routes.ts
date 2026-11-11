@@ -1,6 +1,7 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import {
+  MODELOS_CHECKLIST_PADRAO,
   ROTULO_SITUACAO_APR,
   ROTULO_SITUACAO_OS,
   aprAprovarSchema,
@@ -13,10 +14,11 @@ import {
   modeloChecklistUpdateSchema,
   osFiltroSchema,
   osGerarSchema,
+  osUpdateSchema,
   type SituacaoApr,
   type SituacaoOs,
 } from '@safetyguard/shared';
-import { MIMES_DOCUMENTO_ACEITOS, MIMES_IMAGEM_ACEITOS, removerArquivoPublico, salvarDocumento, salvarImagem } from '../../lib/arquivos.js';
+import { MIMES_DOCUMENTO_ACEITOS, MIMES_IMAGEM_ACEITOS, lerArquivoPublico, removerArquivoPublico, salvarDocumento, salvarImagem } from '../../lib/arquivos.js';
 import { contextoDeAuditoria } from '../../lib/autenticacao.js';
 import { RequisicaoInvalida } from '../../lib/erros.js';
 import { guardaPorMetodo } from '../../lib/guarda.js';
@@ -24,6 +26,11 @@ import { uploadMaxBytes } from '../../env.js';
 import {
   aprovarApr,
   atualizarApr,
+  atualizarOrdemServico,
+  definirArquivoAssinadoOs,
+  excluirApr,
+  verificarApr,
+  verificarCienciaOs,
   atualizarModeloChecklist,
   criarApr,
   criarModeloChecklist,
@@ -96,6 +103,32 @@ export async function registrarRotasDocumentacaoTecnica(app: FastifyInstance): P
       return reply.status(201).send(rotularOs(criada));
     });
 
+    /** Edicao do texto complementar enquanto aguarda ciencia (o cliente pode ajustar). */
+    os.put('/ordens-servico/:id', async (request) => {
+      const { id } = paramsSchema.parse(request.params);
+      const dados = osUpdateSchema.parse(request.body);
+      return rotularOs(await atualizarOrdemServico(id, dados, contextoDeAuditoria(request)));
+    });
+
+    /** Copia assinada em papel, digitalizada (PDF ou imagem). */
+    os.post('/ordens-servico/:id/arquivo-assinado', async (request) => {
+      const { id } = paramsSchema.parse(request.params);
+      const atual = await obterOrdemServicoOuFalhar(id);
+      const { buffer, mimetype } = await receberArquivo(request, MIMES_DOCUMENTO_ACEITOS);
+      const url = await salvarDocumento(buffer, mimetype, 'os-assinada');
+      const atualizada = await definirArquivoAssinadoOs(id, url);
+      await removerArquivoPublico(atual.arquivoAssinadoUrl);
+      return rotularOs(atualizada);
+    });
+
+    /** Onde conferir a autenticidade: recalcula o carimbo da ciencia. */
+    os.get('/ordens-servico/:id/verificar', async (request) => {
+      const { id } = paramsSchema.parse(request.params);
+      const atual = await obterOrdemServicoOuFalhar(id);
+      const assinatura = await lerArquivoPublico(atual.cienciaAssinaturaUrl);
+      return verificarCienciaOs(id, assinatura);
+    });
+
     /** Ciencia do trabalhador: imagem da assinatura, que recebe carimbo. */
     os.post('/ordens-servico/:id/ciencia', async (request) => {
       const { id } = paramsSchema.parse(request.params);
@@ -160,6 +193,19 @@ export async function registrarRotasDocumentacaoTecnica(app: FastifyInstance): P
       return rotularApr(await encerrarApr(id, contextoDeAuditoria(request)));
     });
 
+    campo.delete('/aprs/:id', async (request, reply) => {
+      const { id } = paramsSchema.parse(request.params);
+      const { arquivoUrl } = await excluirApr(id, contextoDeAuditoria(request));
+      await removerArquivoPublico(arquivoUrl);
+      return reply.status(204).send();
+    });
+
+    /** Onde conferir a autenticidade da assinatura eletronica da APR. */
+    campo.get('/aprs/:id/verificar', async (request) => {
+      const { id } = paramsSchema.parse(request.params);
+      return verificarApr(id);
+    });
+
     campo.post('/aprs/:id/arquivo', async (request) => {
       const { id } = paramsSchema.parse(request.params);
       const atual = await obterAprOuFalhar(id);
@@ -183,6 +229,25 @@ export async function registrarRotasDocumentacaoTecnica(app: FastifyInstance): P
       const dados = modeloChecklistCreateSchema.parse(request.body);
       const modelo = await criarModeloChecklist(dados, contextoDeAuditoria(request));
       return reply.status(201).send(modelo);
+    });
+
+    /** Biblioteca padrao de checklists (ferramentas e equipamentos), copiada para o cliente. */
+    campo.get('/checklists/modelos/padrao', async () => MODELOS_CHECKLIST_PADRAO);
+
+    campo.post('/checklists/modelos/padrao', async (request, reply) => {
+      const { clienteId, nomes } = z
+        .object({ clienteId: z.string().uuid('Cliente invalido.'), nomes: z.array(z.string()).optional() })
+        .parse(request.body);
+      const existentes = await listarModelosChecklist(clienteId, true);
+      const chaves = new Set(existentes.map((m) => `${m.tipoEquipamento}|${m.nome}`.toLowerCase()));
+      let criados = 0;
+      for (const modelo of MODELOS_CHECKLIST_PADRAO) {
+        if (nomes && !nomes.includes(modelo.tipoEquipamento)) continue;
+        if (chaves.has(`${modelo.tipoEquipamento}|${modelo.nome}`.toLowerCase())) continue;
+        await criarModeloChecklist({ clienteId, nome: modelo.nome, tipoEquipamento: modelo.tipoEquipamento, itens: modelo.itens, ativo: true }, contextoDeAuditoria(request));
+        criados += 1;
+      }
+      return reply.status(201).send({ criados, ignorados: MODELOS_CHECKLIST_PADRAO.length - criados });
     });
 
     campo.put('/checklists/modelos/:id', async (request) => {

@@ -1,7 +1,8 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import type { Prisma } from '@prisma/client';
 import { z } from 'zod';
-import { arredondar, ddsCreateSchema, ddsFiltroSchema, ddsUpdateSchema } from '@safetyguard/shared';
+import { arredondar, ddsCreateSchema, ddsFiltroSchema, ddsGerarSchema, ddsUpdateSchema } from '@safetyguard/shared';
+import { assistenteDisponivel, gerarTexto } from '../../lib/assistente.js';
 import { prisma } from '../../db.js';
 import { NaoEncontrado, RequisicaoInvalida } from '../../lib/erros.js';
 import { registrarAuditoria, calcularDiferenca } from '../../lib/auditoria.js';
@@ -47,6 +48,8 @@ export async function registrarRotasDds(app: FastifyInstance): Promise<void> {
     const where: Prisma.RegistroDdsWhereInput = {};
     if (filtro.clienteId) where.clienteId = filtro.clienteId;
     if (filtro.areaId) where.areaId = filtro.areaId;
+    if (filtro.temaId) where.temaId = filtro.temaId;
+    if (filtro.lider) where.lider = { contains: filtro.lider, mode: 'insensitive' };
     if (filtro.de || filtro.ate) {
       where.data = { ...(filtro.de ? { gte: filtro.de } : {}), ...(filtro.ate ? { lte: filtro.ate } : {}) };
     }
@@ -79,6 +82,127 @@ export async function registrarRotasDds(app: FastifyInstance): Promise<void> {
       pagina: filtro.pagina,
       porPagina: filtro.porPagina,
       totalPaginas: Math.max(1, Math.ceil(total / filtro.porPagina)),
+    };
+  });
+
+  /**
+   * Roteiro de DDS gerado pela assistente a partir do tema. Com a chave da
+   * Anthropic configurada usa a IA; sem ela, monta um roteiro-modelo a partir
+   * do titulo e da categoria do tema. Nada e gravado aqui: o texto volta
+   * para a tela, editavel, e so entra no registro quando o usuario salvar.
+   */
+  app.post('/dds/gerar', async (request) => {
+    const dados = ddsGerarSchema.parse(request.body);
+    const tema = dados.temaId ? await prisma.temaDds.findUnique({ where: { id: dados.temaId } }) : null;
+    const titulo = tema?.titulo ?? dados.temaLivre?.trim();
+    if (!titulo) throw new RequisicaoInvalida('Escolha um tema do banco ou descreva o tema livre.', 'TEMA_AUSENTE');
+
+    const categoria = tema?.categoria ?? 'Seguranca do trabalho';
+    const minutos = dados.duracaoMinutos;
+
+    const reserva = () =>
+      [
+        `# DDS — ${titulo}`,
+        `Categoria: ${categoria} · Duracao sugerida: ${minutos} min`,
+        '',
+        '## 1. Abertura (1 min)',
+        `Bom dia a todos. O tema de hoje e "${titulo}". Vamos conversar sobre por que isso importa para a nossa seguranca e o que cada um pode fazer ainda hoje.`,
+        '',
+        '## 2. Por que falar disso? (2 min)',
+        `- Situacoes do dia a dia em que "${titulo.toLowerCase()}" aparece na nossa atividade.`,
+        '- Consequencias quando o cuidado falha: lesoes, afastamento, impacto na familia e na equipe.',
+        dados.contexto ? `- Contexto da nossa operacao: ${dados.contexto.trim()}` : '- Exemplos recentes da nossa area (se houver, cite sem expor pessoas).',
+        '',
+        '## 3. O que fazer — boas praticas (4 min)',
+        '- Planejar a atividade antes de comecar: conhecer os riscos e os controles.',
+        '- Usar os EPIs exigidos e verificar o estado deles antes do uso.',
+        '- Respeitar bloqueios, sinalizacoes e permissoes de trabalho.',
+        '- Em duvida, parar e perguntar ao supervisor — nenhuma tarefa justifica um acidente.',
+        '',
+        '## 4. Perguntas para a equipe (2 min)',
+        `- Onde "${titulo.toLowerCase()}" pode acontecer na tarefa de hoje?`,
+        '- O que podemos mudar agora para reduzir esse risco?',
+        '',
+        '## 5. Compromisso e encerramento (1 min)',
+        'Cada um se compromete com uma atitude segura hoje. Registre as presencas na lista.',
+        '',
+        '_Roteiro-modelo: a assistente de IA nao esta configurada (ANTHROPIC_API_KEY). Edite o texto antes de usar._',
+      ].join('\n');
+
+    const resultado = await gerarTexto({
+      sistema:
+        'Voce e um tecnico de seguranca do trabalho experiente, redigindo roteiros de DDS (Dialogo Diario de Seguranca) em portugues do Brasil para equipes operacionais. ' +
+        'Escreva em linguagem simples e direta, sem jargao desnecessario, com exemplos concretos de campo. Use Markdown com titulos "##" numerados: abertura, por que falar disso, o que fazer (boas praticas em lista), perguntas para a equipe, compromisso/encerramento. ' +
+        'Cite as NRs aplicaveis quando fizer sentido. Nao invente dados da empresa. O roteiro deve caber na duracao informada.',
+      pedido: `Tema: ${titulo}\nCategoria: ${categoria}\nDuracao: ${minutos} minutos${dados.contexto ? `\nContexto da operacao: ${dados.contexto}` : ''}`,
+      reserva,
+      maxTokens: 2500,
+    });
+
+    return { titulo, categoria, ...resultado, assistenteConfigurada: assistenteDisponivel() };
+  });
+
+  /** Painel do DDS: por mes, por categoria, por area e por lider. */
+  app.get('/dds/painel', async (request) => {
+    const { clienteId, meses } = z
+      .object({ clienteId: z.string().uuid().optional(), meses: z.coerce.number().int().min(1).max(24).default(6) })
+      .parse(request.query);
+    const inicio = new Date();
+    inicio.setMonth(inicio.getMonth() - meses);
+    inicio.setDate(1);
+    inicio.setHours(0, 0, 0, 0);
+
+    const registros = await prisma.registroDds.findMany({
+      where: { ...(clienteId ? { clienteId } : {}), data: { gte: inicio } },
+      select: {
+        data: true,
+        lider: true,
+        participantes: true,
+        duracaoMinutos: true,
+        temaLivre: true,
+        tema: { select: { titulo: true, categoria: true } },
+        area: { select: { nome: true } },
+      },
+    });
+
+    const porMes = new Map<string, { mes: string; dds: number; participantes: number }>();
+    const porCategoria = new Map<string, number>();
+    const porArea = new Map<string, number>();
+    const porLider = new Map<string, { dds: number; participantes: number }>();
+    const porTema = new Map<string, number>();
+
+    for (const r of registros) {
+      const mes = r.data.toISOString().slice(0, 7);
+      const m = porMes.get(mes) ?? { mes, dds: 0, participantes: 0 };
+      m.dds += 1;
+      m.participantes += r.participantes;
+      porMes.set(mes, m);
+
+      const categoria = r.tema?.categoria ?? 'Tema livre';
+      porCategoria.set(categoria, (porCategoria.get(categoria) ?? 0) + 1);
+      const area = r.area?.nome ?? 'Geral';
+      porArea.set(area, (porArea.get(area) ?? 0) + 1);
+      const l = porLider.get(r.lider) ?? { dds: 0, participantes: 0 };
+      l.dds += 1;
+      l.participantes += r.participantes;
+      porLider.set(r.lider, l);
+      const tema = r.tema?.titulo ?? r.temaLivre ?? '—';
+      porTema.set(tema, (porTema.get(tema) ?? 0) + 1);
+    }
+
+    const contagem = (mapa: Map<string, number>) =>
+      [...mapa.entries()].map(([chave, total]) => ({ chave, total })).sort((a, b) => b.total - a.total);
+
+    return {
+      periodo: { inicio, meses },
+      total: registros.length,
+      participantesTotal: registros.reduce((soma, r) => soma + r.participantes, 0),
+      minutosTotal: registros.reduce((soma, r) => soma + (r.duracaoMinutos ?? 0), 0),
+      porMes: [...porMes.values()].sort((a, b) => a.mes.localeCompare(b.mes)),
+      porCategoria: contagem(porCategoria),
+      porArea: contagem(porArea),
+      porLider: [...porLider.entries()].map(([chave, v]) => ({ chave, ...v })).sort((a, b) => b.dds - a.dds),
+      temasMaisUsados: contagem(porTema).slice(0, 10),
     };
   });
 

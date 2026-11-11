@@ -98,6 +98,16 @@ export const requisitoCreateSchema = z.object({
 
 export type RequisitoCreateData = z.output<typeof requisitoCreateSchema>;
 
+/** Varios treinamentos para a mesma funcao, de uma vez. */
+export const requisitosLoteSchema = z.object({
+  funcao: texto(2, 80, 'Funcao'),
+  treinamentoIds: z
+    .array(z.string().uuid('Treinamento invalido.'))
+    .min(1, 'Selecione ao menos um treinamento.')
+    .max(50),
+});
+export type RequisitosLoteData = z.output<typeof requisitosLoteSchema>;
+
 /* -------------------------------------------------------------------------- */
 /* Realizacao                                                                  */
 /* -------------------------------------------------------------------------- */

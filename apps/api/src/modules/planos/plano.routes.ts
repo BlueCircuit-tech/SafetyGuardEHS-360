@@ -33,6 +33,7 @@ import {
   resumoPlanos,
 } from './plano.service.js';
 import { listarNotificacoes, resumoNotificacoes } from './notificacao.service.js';
+import { processarAlertasDiarios } from './alertas.service.js';
 import { prisma } from '../../db.js';
 import { MIMES_IMAGEM_ACEITOS, removerArquivoPublico, salvarImagem } from '../../lib/arquivos.js';
 import { RequisicaoInvalida } from '../../lib/erros.js';
@@ -113,8 +114,10 @@ export async function rotasPlanos(app: FastifyInstance): Promise<void> {
       return reply.status(401).send({ erro: { codigo: 'CRON_NAO_AUTORIZADO', mensagem: 'Segredo invalido.' } });
     }
     const resultado = await processarEscalonamentos({ autor: 'agendador', ip: request.ip });
-    request.log.info({ resultado }, 'escalonamento automatico executado');
-    return { executadoEm: new Date(), ...resultado };
+    // O agendador roda uma vez por dia (plano Hobby da Vercel): aproveita para o resumo de pendencias.
+    const alertasDiarios = await processarAlertasDiarios();
+    request.log.info({ resultado, alertasDiarios }, 'escalonamento automatico executado');
+    return { executadoEm: new Date(), ...resultado, alertasDiarios };
   });
 
   /* ------------------------------------------------------------ painel --- */
@@ -235,6 +238,23 @@ export async function rotasPlanos(app: FastifyInstance): Promise<void> {
     const { id } = paramsSchema.parse(request.params);
     const { limite } = z.object({ limite: z.coerce.number().int().min(1).max(200).default(50) }).parse(request.query);
     return listarAuditoriaPlano(id, limite);
+  });
+
+  /** Foto da situacao encontrada — o "antes" do plano. */
+  app.post('/planos-acao/:id/foto-inicial', async (request) => {
+    const { id } = paramsSchema.parse(request.params);
+    const atual = await obterPlanoOuFalhar(id);
+    const arquivo = await request.file({ limits: { fileSize: uploadMaxBytes } });
+    if (!arquivo) throw new RequisicaoInvalida('Envie o arquivo no campo "arquivo" (multipart/form-data).', 'ARQUIVO_AUSENTE');
+    if (!MIMES_IMAGEM_ACEITOS.includes(arquivo.mimetype)) {
+      throw new RequisicaoInvalida(`Formato ${arquivo.mimetype} nao suportado. Envie PNG, JPG, WEBP ou SVG.`, 'FORMATO_NAO_SUPORTADO');
+    }
+    const url = await salvarImagem(await arquivo.toBuffer(), arquivo.mimetype, 'plano-antes');
+    const atualizado = await atualizarPlano(id, { fotoInicialUrl: url }, contextoDeAuditoria(request));
+    // A foto herdada da observacao pertence a observacao: so apaga o que era do plano.
+    const origem = atual.observacaoId ? await prisma.observacao.findUnique({ where: { id: atual.observacaoId }, select: { fotoUrl: true } }) : null;
+    if (atual.fotoInicialUrl && atual.fotoInicialUrl !== origem?.fotoUrl) await removerArquivoPublico(atual.fotoInicialUrl);
+    return serializar(atualizado);
   });
 
   app.post('/planos-acao/:id/evidencia', async (request) => {

@@ -98,6 +98,13 @@ const colaboradorBaseSchema = z.object({
   /* --- Contato ------------------------------------------------------------ */
   email: opcional(z.string().trim().toLowerCase().email('E-mail invalido.').max(150)),
   telefone: opcional(z.string().transform(limparTelefone).refine(isTelefoneValido, 'Telefone invalido.')),
+  /** Lideranca direta (supervisor/encarregado). */
+  liderNome: opcional(z.string().trim().max(120)),
+
+  /* --- Liberacao para o trabalho ---------------------------------------- */
+  /** Bloqueio manual: impede o acesso ao trabalho ate ser retirado. Exige motivo. */
+  bloqueado: z.boolean().default(false),
+  motivoBloqueio: opcional(z.string().trim().max(300)),
 
   situacao: z.enum(SITUACOES_COLABORADOR).default('ATIVO'),
   observacoes: opcional(z.string().trim().max(1000)),
@@ -110,9 +117,19 @@ function validarColaborador(
     situacao?: SituacaoColaborador;
     dataAdmissao?: Date | null;
     dataDesligamento?: Date | null;
+    bloqueado?: boolean;
+    motivoBloqueio?: string | null;
   },
   ctx: z.RefinementCtx,
 ): void {
+  if (dados.bloqueado === true && !dados.motivoBloqueio) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['motivoBloqueio'],
+      message: 'Informe o motivo do bloqueio.',
+    });
+  }
+
   if (dados.vinculo === 'TERCEIRO' && !dados.terceiroId) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
@@ -171,6 +188,10 @@ export const colaboradorFiltroSchema = z.object({
   situacao: z.enum(SITUACOES_COLABORADOR).optional(),
   /** `true` filtra quem esta com ASO vencido ou sem nenhum ASO. */
   asoIrregular: z.coerce.boolean().optional(),
+  /** Situacao do ASO atual: VIGENTE, A_VENCER, VENCIDO ou SEM_ASO. */
+  situacaoAso: z.enum(['VIGENTE', 'A_VENCER', 'VENCIDO', 'SEM_VALIDADE', 'SEM_ASO']).optional(),
+  /** `true` = so bloqueados; `false` = so liberados. */
+  bloqueado: z.enum(['true', 'false']).optional(),
   ordenarPor: z.enum(ORDENACOES_COLABORADOR).default('nome'),
   direcao: z.enum(['asc', 'desc']).default('asc'),
   pagina: z.coerce.number().int().min(1).default(1),
