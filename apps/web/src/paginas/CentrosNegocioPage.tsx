@@ -142,6 +142,19 @@ export function CentrosNegocioPage() {
             Agrupamento intermediário entre a matriz e os clientes — por regional, por unidade ou por tipo de contrato.
             É um dos filtros transversais dos dashboards e desce em cascata para clientes e terceiros.
           </p>
+          <details className="ajuda-expansivel">
+            <summary>O que é um Centro de Negócio e quando usar?</summary>
+            <p>
+              É uma “pasta” que agrupa clientes para a consultoria enxergar resultados em bloco. Exemplos: <b>Regional
+              Sul</b> (todos os clientes atendidos pela equipe do Sul), <b>Unidade Mineração</b> (clientes do mesmo
+              segmento) ou <b>Contratos de SESMT terceirizado</b> (clientes com o mesmo tipo de contrato).
+            </p>
+            <ul>
+              <li>Com centros cadastrados, os dashboards e rankings podem ser filtrados por regional/unidade além de por cliente.</li>
+              <li>Um cliente pertence a um único centro; o vínculo é feito no cadastro do cliente ou aqui, em “vincular clientes”.</li>
+              <li>Se a consultoria atende poucos clientes, este módulo é opcional: deixe os clientes sem centro e nada muda no restante do sistema.</li>
+            </ul>
+          </details>
         </div>
         <button type="button" className="btn btn-primary" onClick={() => navegar('/centros-negocio/novo')}>
           ＋ Novo centro

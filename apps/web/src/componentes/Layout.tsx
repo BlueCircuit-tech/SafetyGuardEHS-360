@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
-import { Link, NavLink, Outlet, useLocation } from 'react-router-dom';
+import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { Icone } from './Icone';
 import { Marca } from './Marca';
 import { useNavegacaoVisivel } from './MapaNavegacao';
@@ -118,6 +118,43 @@ function PainelModulos({ aberto, aoFechar }: { aberto: boolean; aoFechar: () => 
   );
 }
 
+/**
+ * Barra de retorno, sempre visivel sob a topbar.
+ *
+ * Pedido recorrente da operacao: um botao de "voltar" bem destacado em todas
+ * as telas, mais um atalho para a pagina inicial. "Voltar" usa o historico do
+ * navegador; quando nao ha para onde voltar (tela aberta por link direto),
+ * leva ao Inicio.
+ */
+function BarraVoltar({ pathname }: { pathname: string }) {
+  const navegar = useNavigate();
+  const atual = tituloDaRota(pathname);
+  const naTelaInicial = pathname === '/inicio';
+
+  const voltar = () => {
+    if (window.history.length > 1) navegar(-1);
+    else navegar('/inicio');
+  };
+
+  if (naTelaInicial) return null;
+
+  return (
+    <div className="barra-voltar" role="navigation" aria-label="Voltar">
+      <button type="button" className="btn btn-voltar" onClick={voltar}>
+        <Icone nome="voltar" tamanho={16} /> Voltar
+      </button>
+      <Link to="/inicio" className="btn btn-outline btn-sm btn-inicio">
+        <Icone nome="bussola" tamanho={14} /> Página inicial
+      </Link>
+      {atual?.tema ? (
+        <Link to={`/modulos/${atual.tema.slug}`} className="btn btn-ghost btn-sm">
+          {atual.tema.numero}. {atual.tema.titulo}
+        </Link>
+      ) : null}
+    </div>
+  );
+}
+
 export function Layout() {
   const { pathname } = useLocation();
   const { usuario, sair } = useSessao();
@@ -213,6 +250,7 @@ export function Layout() {
         </div>
 
         <div className="content">
+          <BarraVoltar pathname={pathname} />
           <Outlet />
         </div>
       </div>

@@ -105,6 +105,8 @@ export function AcidentesPage() {
   const [novo, setNovo] = useState(NOVO_VAZIO);
   const [salvando, setSalvando] = useState(false);
   const [editandoId, setEditandoId] = useState<string | null>(null);
+  /** Mensagens por campo devolvidas pela API — sem isso o usuario via "corrija 2 campos" e nao sabia quais. */
+  const [erros, setErros] = useState<Record<string, string>>({});
 
   const carregar = useCallback(async () => {
     setCarregando(true);
@@ -161,14 +163,24 @@ export function AcidentesPage() {
       setNovo(NOVO_VAZIO);
       setEditandoId(null);
       void carregar();
+      setErros({});
     } catch (erro) {
-      mostrar(erro instanceof ErroApi ? erro.mensagemAmigavel() : 'Falha ao salvar.', 'erro');
+      if (erro instanceof ErroApi) {
+        const porCampo: Record<string, string> = {};
+        for (const [campo, mensagens] of Object.entries(erro.campos)) porCampo[campo] = mensagens[0] ?? 'Valor invalido.';
+        setErros(porCampo);
+        const lista = Object.values(porCampo);
+        mostrar(lista.length > 0 ? lista.join(' ') : erro.mensagemAmigavel(), 'erro');
+      } else {
+        mostrar('Falha ao salvar.', 'erro');
+      }
     } finally {
       setSalvando(false);
     }
   }
 
   function editar(acidente: AcidenteApi) {
+    setErros({});
     setEditandoId(acidente.id);
     setNovo({
       clienteId: acidente.cliente?.id ?? '',
@@ -232,7 +244,7 @@ export function AcidentesPage() {
         <div className="painel">
           <h3>{editandoId ? 'Editar acidente / investigação' : 'Registrar acidente'}</h3>
           <div className="filtros">
-            <Campo label="Cliente" htmlFor="ac-cliente" obrigatorio>
+            <Campo label="Cliente" htmlFor="ac-cliente" obrigatorio erro={erros.clienteId}>
               <select id="ac-cliente" value={novo.clienteId} onChange={(e) => setNovo({ ...novo, clienteId: e.target.value })}>
                 <option value="">Selecione...</option>
                 {clientes.map((cliente) => (
@@ -242,7 +254,7 @@ export function AcidentesPage() {
                 ))}
               </select>
             </Campo>
-            <Campo label="Colaborador" htmlFor="ac-colab">
+            <Campo label="Colaborador" htmlFor="ac-colab" erro={erros.colaboradorId}>
               <select id="ac-colab" value={novo.colaboradorId} onChange={(e) => setNovo({ ...novo, colaboradorId: e.target.value })}>
                 <option value="">Não identificado</option>
                 {colaboradores.map((colaborador) => (
@@ -252,10 +264,10 @@ export function AcidentesPage() {
                 ))}
               </select>
             </Campo>
-            <Campo label="Data" htmlFor="ac-data" obrigatorio>
+            <Campo label="Data" htmlFor="ac-data" obrigatorio erro={erros.data}>
               <input id="ac-data" type="date" value={novo.data} onChange={(e) => setNovo({ ...novo, data: e.target.value })} />
             </Campo>
-            <Campo label="Tipo" htmlFor="ac-tipo" obrigatorio>
+            <Campo label="Tipo" htmlFor="ac-tipo" obrigatorio erro={erros.tipo}>
               <select id="ac-tipo" value={novo.tipo} onChange={(e) => setNovo({ ...novo, tipo: e.target.value as TipoAcidente })}>
                 {TIPOS_ACIDENTE.map((tipo) => (
                   <option key={tipo} value={tipo}>
@@ -269,7 +281,7 @@ export function AcidentesPage() {
             </Campo>
           </div>
 
-          <Campo label="Descrição do acidente" htmlFor="ac-desc" obrigatorio>
+          <Campo label="Descrição do acidente" htmlFor="ac-desc" obrigatorio erro={erros.descricao}>
             <textarea id="ac-desc" rows={2} value={novo.descricao} onChange={(e) => setNovo({ ...novo, descricao: e.target.value })} />
           </Campo>
 
@@ -285,17 +297,17 @@ export function AcidentesPage() {
               </label>
             </div>
             {novo.comAfastamento ? (
-              <Campo label="Dias de afastamento" htmlFor="ac-dias">
+              <Campo label="Dias de afastamento" htmlFor="ac-dias" erro={erros.diasAfastamento}>
                 <input id="ac-dias" type="number" min={0} className="estreito" value={novo.diasAfastamento} onChange={(e) => setNovo({ ...novo, diasAfastamento: e.target.value })} />
               </Campo>
             ) : null}
-            <Campo label="Nº da CAT (S-2210)" htmlFor="ac-cat" ajuda="Prazo legal: 1 dia útil.">
+            <Campo label="Nº da CAT (S-2210)" htmlFor="ac-cat" ajuda="Prazo legal: 1 dia útil." erro={erros.catNumero}>
               <input id="ac-cat" className="mono" value={novo.catNumero} onChange={(e) => setNovo({ ...novo, catNumero: e.target.value })} />
             </Campo>
-            <Campo label="Investigador" htmlFor="ac-inv">
+            <Campo label="Investigador" htmlFor="ac-inv" erro={erros.investigador}>
               <input id="ac-inv" value={novo.investigador} onChange={(e) => setNovo({ ...novo, investigador: e.target.value })} />
             </Campo>
-            <Campo label="Situação da investigação" htmlFor="ac-sit">
+            <Campo label="Situação da investigação" htmlFor="ac-sit" erro={erros.situacaoInvestigacao}>
               <select
                 id="ac-sit"
                 value={novo.situacaoInvestigacao}
@@ -352,17 +364,31 @@ export function AcidentesPage() {
                 htmlFor="ac-causa"
                 obrigatorio={novo.situacaoInvestigacao === 'CONCLUIDA'}
                 ajuda="A conclusão da análise. Obrigatória para concluir a investigação."
+                erro={erros.causaRaiz}
               >
                 <textarea id="ac-causa" rows={2} value={novo.causaRaiz} onChange={(e) => setNovo({ ...novo, causaRaiz: e.target.value })} />
               </Campo>
             </>
           ) : null}
 
+          {Object.keys(erros).length > 0 ? (
+            <div className="hint alerta" role="alert">
+              <b>Corrija antes de salvar:</b>
+              <ul style={{ margin: '4px 0 0 18px' }}>
+                {Object.entries(erros).map(([campo, mensagem]) => (
+                  <li key={campo}>
+                    <span className="mono">{campo === '_' ? 'geral' : campo}</span> — {mensagem}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+
           <div className="barra-acoes">
             <button
               type="button"
               className="btn btn-primary"
-              disabled={salvando || !novo.clienteId || !novo.data || novo.descricao.length < 10}
+              disabled={salvando}
               onClick={() => void salvar()}
             >
               {salvando ? 'Salvando...' : editandoId ? 'Salvar alterações' : 'Registrar acidente'}

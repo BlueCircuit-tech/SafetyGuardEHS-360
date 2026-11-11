@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Icone } from '../componentes/Icone';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useForm, type Path, type Resolver } from 'react-hook-form';
@@ -46,6 +46,10 @@ export function PlanoAcaoFormPage() {
   const [notificacoes, setNotificacoes] = useState<NotificacaoApi[]>([]);
   const [enviandoEvidencia, setEnviandoEvidencia] = useState(false);
   const inputEvidencia = useRef<HTMLInputElement>(null);
+  /** Foto escolhida antes de o plano existir: sobe logo depois do primeiro salvamento. */
+  const [evidenciaPendente, setEvidenciaPendente] = useState<File | null>(null);
+  const previaPendente = useMemo(() => (evidenciaPendente ? URL.createObjectURL(evidenciaPendente) : null), [evidenciaPendente]);
+  useEffect(() => () => { if (previaPendente) URL.revokeObjectURL(previaPendente); }, [previaPendente]);
 
   const {
     register,
@@ -138,8 +142,18 @@ export function PlanoAcaoFormPage() {
 
       setPlano(salvo);
       mostrar(modoEdicao ? 'Plano atualizado.' : `Plano ${salvo.codigo} aberto.`, 'sucesso');
-      if (!modoEdicao) navegar(`/planos-acao/${salvo.id}`, { replace: true });
-      else void carregarNotificacoes();
+      if (!modoEdicao) {
+        if (evidenciaPendente) {
+          try {
+            await api.upload<PlanoApi>(`/planos-acao/${salvo.id}/evidencia`, evidenciaPendente);
+            mostrar('Evidência anexada.', 'sucesso');
+          } catch (erroFoto) {
+            mostrar(erroFoto instanceof Error ? `Plano salvo, mas a foto falhou: ${erroFoto.message}` : 'Plano salvo, mas a foto falhou.', 'erro');
+          }
+          setEvidenciaPendente(null);
+        }
+        navegar(`/planos-acao/${salvo.id}`, { replace: true });
+      } else void carregarNotificacoes();
     } catch (erro) {
       if (erro instanceof ErroApi) {
         for (const [campo, mensagens] of Object.entries(erro.campos)) {
@@ -153,7 +167,12 @@ export function PlanoAcaoFormPage() {
   });
 
   async function enviarEvidencia(arquivo: File) {
-    if (!id) return;
+    if (!id) {
+      // Plano ainda nao existe: guarda a foto e sobe depois de salvar.
+      setEvidenciaPendente(arquivo);
+      if (inputEvidencia.current) inputEvidencia.current.value = '';
+      return;
+    }
     setEnviandoEvidencia(true);
     try {
       const atualizado = await api.upload<PlanoApi>(`/planos-acao/${id}/evidencia`, arquivo);
@@ -311,7 +330,13 @@ export function PlanoAcaoFormPage() {
               >
                 <div className="logo-box">
                   <div className="logo-preview">
-                    {evidenciaAtual ? <img src={evidenciaAtual} alt="Evidência" /> : <span aria-hidden="true"><Icone nome="anexo" /></span>}
+                    {evidenciaAtual ? (
+                      <img src={evidenciaAtual} alt="Evidência" />
+                    ) : previaPendente ? (
+                      <img src={previaPendente} alt="Evidência (a enviar)" />
+                    ) : (
+                      <span aria-hidden="true"><Icone nome="anexo" /></span>
+                    )}
                   </div>
                   <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                     <input
@@ -327,12 +352,16 @@ export function PlanoAcaoFormPage() {
                     <button
                       type="button"
                       className="btn btn-outline btn-sm"
-                      disabled={!modoEdicao || enviandoEvidencia}
+                      disabled={enviandoEvidencia}
                       onClick={() => inputEvidencia.current?.click()}
                     >
-                      {enviandoEvidencia ? 'Enviando...' : 'Anexar evidência'}
+                      <Icone nome="camera" /> {enviandoEvidencia ? 'Enviando...' : evidenciaPendente ? 'Trocar foto' : 'Anexar foto / evidência'}
                     </button>
-                    {!modoEdicao ? <span className="ajuda">Salve o plano para habilitar o anexo.</span> : null}
+                    {!modoEdicao ? (
+                      <span className="ajuda">
+                        {evidenciaPendente ? `"${evidenciaPendente.name}" será enviada ao salvar o plano.` : 'Pode escolher a foto agora; ela sobe junto com o plano.'}
+                      </span>
+                    ) : null}
                   </div>
                 </div>
               </Campo>

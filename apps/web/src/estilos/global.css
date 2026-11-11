@@ -2527,6 +2527,9 @@ a.stat:hover {
 
 @media print {
   .sidebar,
+  .rail,
+  .painel-modulos,
+  .barra-voltar,
   .topbar,
   .sem-impressao,
   .paginacao,
@@ -3656,4 +3659,67 @@ a.stat:hover {
   .inicio-perfis ul {
     grid-template-columns: 1fr;
   }
+}
+
+
+/* ==========================================================================
+   Barra de retorno (global)
+   ========================================================================== */
+
+.barra-voltar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 0 0 14px;
+}
+
+.btn-voltar {
+  background: var(--primary);
+  color: #fff;
+  border: 1px solid var(--primary);
+  font-weight: 700;
+  padding: 8px 16px;
+  box-shadow: 0 2px 6px rgba(5, 150, 105, 0.25);
+}
+
+.btn-voltar:hover:not(:disabled) {
+  filter: brightness(0.95);
+  color: #fff;
+}
+
+.btn-inicio {
+  font-weight: 600;
+}
+
+/* Bloco de ajuda que abre sob demanda (details/summary) */
+.ajuda-expansivel {
+  margin: 8px 0 12px;
+  padding: 8px 12px;
+  border: 1px dashed var(--border, #d7dee5);
+  border-radius: 8px;
+  background: #f8fafc;
+  font-size: 13px;
+  color: var(--text, #1f2937);
+}
+
+.ajuda-expansivel summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--primary);
+}
+
+.ajuda-expansivel p,
+.ajuda-expansivel ul,
+.ajuda-expansivel ol {
+  margin: 8px 0 0;
+}
+
+.ajuda-expansivel ul,
+.ajuda-expansivel ol {
+  padding-left: 18px;
+}
+
+.ajuda-expansivel li + li {
+  margin-top: 4px;
 }

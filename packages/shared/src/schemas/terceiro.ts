@@ -292,7 +292,7 @@ export const terceiroFiltroSchema = z.object({
   ordenarPor: z.enum(ORDENACOES_TERCEIRO).default('nomeFantasia'),
   direcao: z.enum(['asc', 'desc']).default('asc'),
   pagina: z.coerce.number().int().min(1).default(1),
-  porPagina: z.coerce.number().int().min(1).max(100).default(20),
+  porPagina: z.coerce.number().int().min(1).max(200).default(20),
 });
 
 export type TerceiroFiltro = z.output<typeof terceiroFiltroSchema>;

@@ -53,8 +53,8 @@ export function AfastamentoFormPage() {
   useEffect(() => {
     if (!clienteId) { setColaboradores([]); return; }
     api
-      .get<{ itens: OpcaoColaborador[] }>(`/colaboradores?clienteId=${clienteId}&porPagina=300`)
-      .then((r) => setColaboradores(r.itens))
+      .get<OpcaoColaborador[]>(`/colaboradores/opcoes?clienteId=${clienteId}`)
+      .then(setColaboradores)
       .catch(() => setColaboradores([]));
   }, [clienteId]);
 
@@ -158,7 +158,7 @@ export function AfastamentoFormPage() {
         <button type="button" className="btn btn-ghost" onClick={() => navigate('/absenteismo')}>
           Cancelar
         </button>
-        <button type="submit" className="btn btn-primario" disabled={isSubmitting}>
+        <button type="submit" className="btn btn-primary" disabled={isSubmitting}>
           {isSubmitting ? 'Salvando…' : editando ? 'Salvar' : 'Registrar'}
         </button>
       </div>

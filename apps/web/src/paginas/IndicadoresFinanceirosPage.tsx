@@ -176,7 +176,7 @@ export function IndicadoresFinanceirosPage() {
           </div>
 
           <div className="barra-acoes" style={{ marginTop: 16 }}>
-            <button type="button" className="btn btn-primario" disabled={salvando} onClick={() => void salvar()}>
+            <button type="button" className="btn btn-primary" disabled={salvando} onClick={() => void salvar()}>
               {salvando ? 'Salvando…' : 'Salvar parâmetros'}
             </button>
           </div>

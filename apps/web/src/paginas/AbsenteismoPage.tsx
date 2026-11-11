@@ -91,7 +91,7 @@ export function AbsenteismoPage() {
     <>
       <div className="barra-acoes">
         <h1>Absenteísmo</h1>
-        <Link className="btn btn-primario" to="/absenteismo/novo">
+        <Link className="btn btn-primary" to="/absenteismo/novo">
           <Icone nome="mais" /> Registrar afastamento
         </Link>
       </div>

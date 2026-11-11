@@ -489,6 +489,20 @@ export function ClienteFormPage() {
                 <p className="desc">
                   Base do ranking, dos indicadores e do dimensionamento das equipes de segurança.
                 </p>
+                <details className="ajuda-expansivel">
+                  <summary>O que é o grau de risco (NR-4)?</summary>
+                  <p>
+                    A NR-4 (Quadro I) atribui a cada atividade econômica (CNAE principal) um grau de risco de <b>1</b>{' '}
+                    (baixo) a <b>4</b> (muito alto). Ele é definido pela lei, não pela empresa — consulte pelo CNAE no
+                    Quadro I da NR-4. Exemplos: escritórios e comércio são grau 1; indústria leve e alimentos, grau 2;
+                    metalurgia, química e transporte, grau 3; mineração, construção pesada e energia, grau 4.
+                  </p>
+                  <ul>
+                    <li>Dimensiona o SESMT e a CIPA (quantos profissionais e representantes a empresa precisa ter).</li>
+                    <li>Na plataforma, pesa no ranking e nas metas: um grau 4 com poucos desvios vale mais que um grau 1.</li>
+                    <li>Não confunda com o grau de risco da <i>função</i> (cadastro do colaborador), que define a periodicidade do ASO.</li>
+                  </ul>
+                </details>
 
                 <div className="row3">
                   <Campo label="Grau de risco (NR-4)" obrigatorio erro={erro('grauRisco')}>

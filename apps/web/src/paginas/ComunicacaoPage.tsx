@@ -142,10 +142,22 @@ export function ComunicacaoPage() {
       </div>
 
       <div className="hint">
-        <Icone nome="alerta" /> <b>Nenhum provedor está conectado.</b> As mensagens são montadas com o cabeçalho e a assinatura
-        institucionais da matriz e registradas como <b>simuladas</b> — dá para auditar exatamente o que sairia. Plugar
-        e-mail ou WhatsApp muda só o status para <i>Enviada</i>.
+        <Icone nome="alerta" /> <b>E-mail sai de verdade quando o SMTP está configurado</b>; WhatsApp e voz ainda não têm
+        provedor conectado. As mensagens são montadas com o cabeçalho e a assinatura institucionais da matriz e registradas
+        aqui — dá para auditar exatamente o que saiu ou sairia.
       </div>
+
+      <details className="ajuda-expansivel">
+        <summary>Como funciona a notificação por voz?</summary>
+        <p>
+          A voz é o <b>canal de reforço</b> da matriz de comunicação para ocorrências de <b>Risco I</b>: quando o alerta
+          é gerado fora do horário comercial (07h–18h, seg–sex) ou quando o e-mail/WhatsApp não tem confirmação de
+          entrega, a matriz manda acrescentar uma ligação ao supervisor. Hoje o sistema <b>registra</b> essa ligação na
+          lista abaixo (canal “Ligação de voz”) com a mensagem que seria falada, mas não disca: fazer a chamada exige
+          um provedor de telefonia (ex.: Twilio, Zenvia) com confirmação de atendimento. Quando esse provedor for
+          contratado, o registro passa a “Enviada” sem mudar a regra.
+        </p>
+      </details>
 
       <div className="stat-grid">
         <div className="stat">

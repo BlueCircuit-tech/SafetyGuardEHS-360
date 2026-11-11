@@ -40,6 +40,13 @@ interface OpcaoTerceiro {
   nomeFantasia: string;
 }
 
+interface EventoTimeline {
+  quando: string;
+  titulo: string;
+  detalhe: string;
+  tipo: string;
+}
+
 const FATORES = [
   { campo: 'severidade', rotulo: 'Severidade', ajuda: 'Gravidade do dano potencial' },
   { campo: 'probabilidade', rotulo: 'Probabilidade', ajuda: 'Chance de o evento ocorrer' },
@@ -66,6 +73,10 @@ export function ObservacaoFormPage() {
   const [enviandoFoto, setEnviandoFoto] = useState(false);
   const [abrindoPlano, setAbrindoPlano] = useState(false);
   const inputFoto = useRef<HTMLInputElement>(null);
+  /** Foto escolhida antes de a observacao existir: sobe logo depois do primeiro salvamento. */
+  const [fotoPendente, setFotoPendente] = useState<File | null>(null);
+  const previaPendente = useMemo(() => (fotoPendente ? URL.createObjectURL(fotoPendente) : null), [fotoPendente]);
+  useEffect(() => () => { if (previaPendente) URL.revokeObjectURL(previaPendente); }, [previaPendente]);
 
   const {
     register,
@@ -211,7 +222,18 @@ export function ObservacaoFormPage() {
 
       setObservacao(salva);
       mostrar(modoEdicao ? 'Observação atualizada.' : 'Observação registrada. Indicadores atualizados.', 'sucesso');
-      if (!modoEdicao) navegar(`/observacoes/${salva.id}`, { replace: true });
+      if (!modoEdicao) {
+        if (fotoPendente) {
+          try {
+            await api.upload<ObservacaoApi>(`/observacoes/${salva.id}/foto`, fotoPendente);
+            mostrar('Foto anexada.', 'sucesso');
+          } catch (erroFoto) {
+            mostrar(erroFoto instanceof Error ? `Observação salva, mas a foto falhou: ${erroFoto.message}` : 'Observação salva, mas a foto falhou.', 'erro');
+          }
+          setFotoPendente(null);
+        }
+        navegar(`/observacoes/${salva.id}`, { replace: true });
+      }
     } catch (erro) {
       if (erro instanceof ErroApi) {
         for (const [campo, mensagens] of Object.entries(erro.campos)) {
@@ -241,7 +263,9 @@ export function ObservacaoFormPage() {
 
   async function enviarFoto(arquivo: File) {
     if (!id) {
-      mostrar('Salve a observacao antes de anexar a foto.', 'erro');
+      // Observacao ainda nao existe: guarda a foto e sobe depois de salvar.
+      setFotoPendente(arquivo);
+      if (inputFoto.current) inputFoto.current.value = '';
       return;
     }
     setEnviandoFoto(true);
@@ -258,21 +282,10 @@ export function ObservacaoFormPage() {
     }
   }
 
-  if (carregando) {
-    return (
-      <div className="centro-tela">
-        <div className="spinner" />
-        Carregando formulário...
-      </div>
-    );
-  }
-
-  interface EventoTimeline {
-    quando: string;
-    titulo: string;
-    detalhe: string;
-    tipo: string;
-  }
+  /* --- linha do tempo ------------------------------------------------------ */
+  // Hooks sempre antes de qualquer retorno antecipado: declarar estado depois do
+  // "carregando" fazia o React contar hooks a mais na segunda renderizacao e a
+  // tela quebrava ao abrir uma observacao existente (ex.: "Observacao de origem").
   const [timeline, setTimeline] = useState<EventoTimeline[]>([]);
 
   useEffect(() => {
@@ -282,6 +295,15 @@ export function ObservacaoFormPage() {
       .then((resposta) => setTimeline(resposta.eventos))
       .catch(() => setTimeline([]));
   }, [id, observacao]);
+
+  if (carregando) {
+    return (
+      <div className="centro-tela">
+        <div className="spinner" />
+        Carregando formulário...
+      </div>
+    );
+  }
 
   const erro = (campo: keyof ObservacaoFormValues) => errors[campo]?.message as string | undefined;
   const causasDoTipo = causas.filter((causa) => causa.tipo === valores.tipo);
@@ -493,7 +515,13 @@ export function ObservacaoFormPage() {
                 <Campo label="Foto da evidência" erro={erro('fotoUrl')}>
                   <div className="logo-box">
                     <div className="logo-preview">
-                      {fotoAtual ? <img src={fotoAtual} alt="Evidência" /> : <span aria-hidden="true"><Icone nome="camera" /></span>}
+                      {fotoAtual ? (
+                        <img src={fotoAtual} alt="Evidência" />
+                      ) : previaPendente ? (
+                        <img src={previaPendente} alt="Evidência (a enviar)" />
+                      ) : (
+                        <span aria-hidden="true"><Icone nome="camera" /></span>
+                      )}
                     </div>
                     <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                       <input
@@ -510,12 +538,16 @@ export function ObservacaoFormPage() {
                       <button
                         type="button"
                         className="btn btn-outline btn-sm"
-                        disabled={!modoEdicao || enviandoFoto}
+                        disabled={enviandoFoto}
                         onClick={() => inputFoto.current?.click()}
                       >
-                        {enviandoFoto ? 'Enviando...' : 'Anexar foto'}
+                        <Icone nome="camera" /> {enviandoFoto ? 'Enviando...' : fotoPendente ? 'Trocar foto' : 'Anexar foto'}
                       </button>
-                      {!modoEdicao ? <span className="ajuda">Salve para habilitar o anexo.</span> : null}
+                      {!modoEdicao ? (
+                        <span className="ajuda">
+                          {fotoPendente ? `"${fotoPendente.name}" será enviada ao salvar.` : 'Pode tirar a foto agora; ela sobe junto com a observação.'}
+                        </span>
+                      ) : null}
                     </div>
                   </div>
                 </Campo>

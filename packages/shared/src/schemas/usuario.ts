@@ -226,7 +226,7 @@ export const usuarioFiltroSchema = z.object({
   perfil: z.enum(PERFIS).optional(),
   ativo: z.enum(['true', 'false']).optional(),
   pagina: z.coerce.number().int().min(1).default(1),
-  porPagina: z.coerce.number().int().min(1).max(100).default(20),
+  porPagina: z.coerce.number().int().min(1).max(200).default(20),
 });
 
 export type UsuarioFiltro = z.output<typeof usuarioFiltroSchema>;

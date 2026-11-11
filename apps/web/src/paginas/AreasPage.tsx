@@ -151,6 +151,15 @@ export function AreasPage() {
             A área é o ponto de leitura da inspeção de campo. Cada uma tem um QR Code próprio que abre o formulário de
             observação já identificado com cliente, área e riscos esperados.
           </p>
+          <details className="ajuda-expansivel">
+            <summary>Como funciona o QR Code?</summary>
+            <ol>
+              <li>Cadastre a área (setor, prédio, frente de serviço) e o sistema gera um QR Code exclusivo para ela.</li>
+              <li>Imprima a placa (botão “Placas” abaixo) e fixe no local — o QR leva ao formulário de observação já com cliente e área preenchidos, sem login.</li>
+              <li>Quem está em campo aponta a câmera do celular, descreve o desvio ou o comportamento seguro, tira a foto e envia.</li>
+              <li>Prefere <b>um único QR por empresa</b>? Cada cliente também tem um QR Code geral (no cadastro do cliente): ele abre uma lista com todas as áreas ativas para a pessoa escolher onde está.</li>
+            </ol>
+          </details>
         </div>
         <button
           type="button"

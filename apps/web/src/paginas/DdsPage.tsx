@@ -56,6 +56,7 @@ export function DdsPage() {
   const [clienteId, setClienteId] = useState('');
   const [novo, setNovo] = useState(NOVO_VAZIO);
   const [salvando, setSalvando] = useState(false);
+  const [erros, setErros] = useState<Record<string, string>>({});
 
   const categorias = useMemo(() => {
     const mapa = new Map<string, TemaApi[]>();
@@ -108,7 +109,25 @@ export function DdsPage() {
       .catch(() => setAreas([]));
   }, [novo.clienteId]);
 
+  /** Validacao local, com a mesma mensagem que o servidor daria — o botao nunca fica "mudo". */
+  function validarLocal(): Record<string, string> {
+    const falta: Record<string, string> = {};
+    if (!novo.clienteId) falta.clienteId = 'Informe o cliente.';
+    if (!novo.data) falta.data = 'Informe a data do DDS.';
+    else if (new Date(`${novo.data}T23:59:59`).getTime() < Date.now() - 366 * 24 * 60 * 60 * 1000) falta.data = 'Data muito antiga.';
+    if (!novo.lider || novo.lider.trim().length < 3) falta.lider = 'Informe quem conduziu (ao menos 3 letras).';
+    if (!novo.participantes || Number(novo.participantes) < 1) falta.participantes = 'Informe o numero de participantes (ao menos 1).';
+    if (!novo.temaId && !novo.temaLivre.trim()) falta.temaId = 'Escolha um tema do banco ou descreva o tema livre.';
+    return falta;
+  }
+
   async function registrar() {
+    const falta = validarLocal();
+    setErros(falta);
+    if (Object.keys(falta).length > 0) {
+      mostrar(Object.values(falta).join(' '), 'erro');
+      return;
+    }
     setSalvando(true);
     try {
       await api.post('/dds', {
@@ -120,9 +139,18 @@ export function DdsPage() {
       });
       mostrar('DDS registrado.', 'sucesso');
       setNovo({ ...NOVO_VAZIO, clienteId: novo.clienteId, lider: novo.lider });
+      setErros({});
       void carregar();
     } catch (erro) {
-      mostrar(erro instanceof ErroApi ? erro.mensagemAmigavel() : 'Falha ao registrar.', 'erro');
+      if (erro instanceof ErroApi) {
+        const porCampo: Record<string, string> = {};
+        for (const [campo, mensagens] of Object.entries(erro.campos)) porCampo[campo] = mensagens[0] ?? 'Valor invalido.';
+        setErros(porCampo);
+        const lista = Object.values(porCampo);
+        mostrar(lista.length > 0 ? lista.join(' ') : erro.mensagemAmigavel(), 'erro');
+      } else {
+        mostrar('Falha ao registrar.', 'erro');
+      }
     } finally {
       setSalvando(false);
     }
@@ -184,7 +212,7 @@ export function DdsPage() {
         <div className="painel">
           <h3>Registrar DDS</h3>
           <div className="filtros">
-            <Campo label="Cliente" htmlFor="dds-cliente" obrigatorio>
+            <Campo label="Cliente" htmlFor="dds-cliente" obrigatorio erro={erros.clienteId}>
               <select id="dds-cliente" value={novo.clienteId} onChange={(e) => setNovo({ ...novo, clienteId: e.target.value })}>
                 <option value="">Selecione...</option>
                 {clientes.map((cliente) => (
@@ -194,7 +222,7 @@ export function DdsPage() {
                 ))}
               </select>
             </Campo>
-            <Campo label="Área" htmlFor="dds-area">
+            <Campo label="Área" htmlFor="dds-area" erro={erros.areaId}>
               <select id="dds-area" value={novo.areaId} onChange={(e) => setNovo({ ...novo, areaId: e.target.value })}>
                 <option value="">Geral / sem área</option>
                 {areas.map((area) => (
@@ -204,13 +232,13 @@ export function DdsPage() {
                 ))}
               </select>
             </Campo>
-            <Campo label="Data" htmlFor="dds-data" obrigatorio>
+            <Campo label="Data" htmlFor="dds-data" obrigatorio erro={erros.data}>
               <input id="dds-data" type="date" value={novo.data} onChange={(e) => setNovo({ ...novo, data: e.target.value })} />
             </Campo>
-            <Campo label="Líder" htmlFor="dds-lider" obrigatorio>
+            <Campo label="Líder" htmlFor="dds-lider" obrigatorio erro={erros.lider}>
               <input id="dds-lider" value={novo.lider} onChange={(e) => setNovo({ ...novo, lider: e.target.value })} />
             </Campo>
-            <Campo label="Participantes" htmlFor="dds-part" obrigatorio>
+            <Campo label="Participantes" htmlFor="dds-part" obrigatorio erro={erros.participantes}>
               <input
                 id="dds-part"
                 type="number"
@@ -220,7 +248,7 @@ export function DdsPage() {
                 onChange={(e) => setNovo({ ...novo, participantes: e.target.value })}
               />
             </Campo>
-            <Campo label="Duração (min)" htmlFor="dds-dur">
+            <Campo label="Duração (min)" htmlFor="dds-dur" erro={erros.duracaoMinutos}>
               <input
                 id="dds-dur"
                 type="number"
@@ -233,7 +261,7 @@ export function DdsPage() {
           </div>
 
           <div className="grid2">
-            <Campo label="Tema do banco" htmlFor="dds-tema" ajuda="Ou descreva um tema livre ao lado.">
+            <Campo label="Tema do banco" htmlFor="dds-tema" ajuda="Ou descreva um tema livre ao lado." erro={erros.temaId}>
               <select id="dds-tema" value={novo.temaId} onChange={(e) => setNovo({ ...novo, temaId: e.target.value, temaLivre: '' })}>
                 <option value="">Selecione...</option>
                 {categorias.map(([categoria, lista]) => (
@@ -247,7 +275,7 @@ export function DdsPage() {
                 ))}
               </select>
             </Campo>
-            <Campo label="Tema livre" htmlFor="dds-livre">
+            <Campo label="Tema livre" htmlFor="dds-livre" erro={erros.temaLivre}>
               <input
                 id="dds-livre"
                 value={novo.temaLivre}
@@ -261,11 +289,12 @@ export function DdsPage() {
             <button
               type="button"
               className="btn btn-primary"
-              disabled={salvando || !novo.clienteId || !novo.data || !novo.lider || !novo.participantes || (!novo.temaId && !novo.temaLivre)}
+              disabled={salvando}
               onClick={() => void registrar()}
             >
               {salvando ? 'Registrando...' : 'Registrar DDS'}
             </button>
+            <span className="hint">Campos com * são obrigatórios. Se faltar algo, o campo é destacado ao clicar.</span>
           </div>
         </div>
       ) : null}

@@ -138,7 +138,7 @@ export function PppPage() {
         <Link className="btn btn-ghost" to={`/colaboradores/${id}`}>
           <Icone nome="voltar" /> Voltar ao cadastro
         </Link>
-        <button type="button" className="btn btn-primario" onClick={() => window.print()}>
+        <button type="button" className="btn btn-primary" onClick={() => window.print()}>
           <Icone nome="imprimir" /> Imprimir / salvar em PDF
         </button>
       </div>

@@ -139,7 +139,7 @@ export const centroNegocioFiltroSchema = z.object({
   ordenarPor: z.enum(ORDENACOES_CENTRO).default('nome'),
   direcao: z.enum(['asc', 'desc']).default('asc'),
   pagina: z.coerce.number().int().min(1).default(1),
-  porPagina: z.coerce.number().int().min(1).max(100).default(20),
+  porPagina: z.coerce.number().int().min(1).max(200).default(20),
 });
 
 export type CentroNegocioFiltro = z.output<typeof centroNegocioFiltroSchema>;
