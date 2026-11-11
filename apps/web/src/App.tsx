@@ -54,6 +54,15 @@ import { ChecklistsPage } from './paginas/ChecklistsPage';
 import { InicioPage } from './paginas/InicioPage';
 import { ModuloPage, ModulosPage } from './paginas/ModulosPage';
 import { AjudaPage, ConfiguracoesHubPage, IndicadoresHubPage, RelatoriosHubPage } from './paginas/HubsPage';
+import { CipaPage } from './paginas/CipaPage';
+import { ErgonomiaPage } from './paginas/ErgonomiaPage';
+import { QuimicosPage } from './paginas/QuimicosPage';
+import { BrigadaPage } from './paginas/BrigadaPage';
+import { FornecedoresPage } from './paginas/FornecedoresPage';
+import { PlanilhaFinanceiraPage } from './paginas/PlanilhaFinanceiraPage';
+import { PontoPage } from './paginas/PontoPage';
+import { ModelosRelatorioPage } from './paginas/ModelosRelatorioPage';
+import { RelatorioFotograficoPage } from './paginas/RelatorioFotograficoPage';
 
 /**
  * Exige sessão válida — e, opcionalmente, uma permissão.
@@ -197,6 +206,16 @@ export function App() {
               {rota('aprs', 'observacoes:ler', <AprPage />)}
               {rota('checklists', 'observacoes:ler', <ChecklistsPage />)}
               {rota('riscos', 'cadastros:ler', <RiscosPage />)}
+
+              {rota('cipa', 'cadastros:ler', <CipaPage />)}
+              {rota('ergonomia', 'cadastros:ler', <ErgonomiaPage />)}
+              {rota('quimicos', 'cadastros:ler', <QuimicosPage />)}
+              {rota('brigada', 'cadastros:ler', <BrigadaPage />)}
+              {rota('fornecedores', 'cadastros:ler', <FornecedoresPage />)}
+              {rota('financeiro/planilha', 'indicadores:ler', <PlanilhaFinanceiraPage />)}
+              <Route path="ponto" element={<Protegido><PontoPage /></Protegido>} />
+              {rota('relatorios/modelos', 'indicadores:ler', <ModelosRelatorioPage />)}
+              {rota('relatorios/fotografico', 'indicadores:ler', <RelatorioFotograficoPage />)}
 
               {rota('dashboard-executivo', 'indicadores:ler', <DashboardExecutivoPage />)}
               {rota('dashboard-gerencial', 'indicadores:ler', <DashboardGerencialPage />)}

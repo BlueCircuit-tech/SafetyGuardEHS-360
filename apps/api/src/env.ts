@@ -38,6 +38,9 @@ const envSchema = z.object({
   SUPABASE_URL: z.string().url().optional(),
   SUPABASE_SERVICE_ROLE_KEY: z.string().optional(),
 
+  /** Chave da API da Anthropic — liga os recursos "gerar com IA". Sem ela, usa-se o gerador local. */
+  ANTHROPIC_API_KEY: z.string().optional(),
+
   /**
    * Segredo que o agendador (Vercel Cron) envia em `Authorization: Bearer`.
    * Sem ele configurado, a rota de cron fica desligada — nunca aberta.

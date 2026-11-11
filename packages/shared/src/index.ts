@@ -34,6 +34,14 @@ export * from './schemas/acidente.js';
 export * from './schemas/risco-inventario.js';
 export * from './schemas/afastamento.js';
 export * from './schemas/documentacao-tecnica.js';
+export * from './schemas/cipa.js';
+export * from './schemas/ergonomia.js';
+export * from './schemas/quimicos.js';
+export * from './schemas/brigada.js';
+export * from './schemas/fornecedor.js';
+export * from './schemas/financeiro-planilha.js';
+export * from './schemas/ponto.js';
+export * from './schemas/modelo-relatorio.js';
 export * from './indicadores/index.js';
 export * from './institucional.js';
 

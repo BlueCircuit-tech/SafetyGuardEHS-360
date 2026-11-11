@@ -25,6 +25,15 @@ export const TIPOS_DOCUMENTO = [
   'FISPQ',
   'PAE',
   'PCMAT',
+  'FICHA_REGISTRO',
+  'CONTRATO_TRABALHO',
+  'ACORDO_COMPENSACAO_HORAS',
+  'ORDEM_SERVICO',
+  'FICHA_EPI',
+  'PGRSS',
+  'PGRS',
+  'CTR_MANIFESTO',
+  'INVENTARIO_RESIDUOS',
   'OUTRO',
 ] as const;
 export type TipoDocumento = (typeof TIPOS_DOCUMENTO)[number];
@@ -41,7 +50,7 @@ export interface DefinicaoDocumento {
   /** Validade tipica em meses; `null` quando nao ha prazo padrao. */
   validadeMeses: number | null;
   exigeResponsavelTecnico: boolean;
-  categoria: 'SAUDE' | 'SEGURANCA' | 'AMBIENTAL' | 'TREINAMENTO' | 'OUTRO';
+  categoria: 'SAUDE' | 'SEGURANCA' | 'AMBIENTAL' | 'TREINAMENTO' | 'COLABORADOR' | 'OUTRO';
 }
 
 export const CATALOGO_DOCUMENTOS: readonly DefinicaoDocumento[] = [
@@ -199,6 +208,80 @@ export const CATALOGO_DOCUMENTOS: readonly DefinicaoDocumento[] = [
     exigeResponsavelTecnico: true,
     categoria: 'SEGURANCA',
   },
+  /* --- Pasta do colaborador (documentos legais SSMA por trabalhador) ------ */
+  {
+    tipo: 'FICHA_REGISTRO',
+    rotulo: 'Ficha de registro',
+    descricao: 'Ficha de registro do empregado (CLT art. 41)',
+    validadeMeses: null,
+    exigeResponsavelTecnico: false,
+    categoria: 'COLABORADOR',
+  },
+  {
+    tipo: 'CONTRATO_TRABALHO',
+    rotulo: 'Contrato de trabalho',
+    descricao: 'Contrato individual de trabalho assinado',
+    validadeMeses: null,
+    exigeResponsavelTecnico: false,
+    categoria: 'COLABORADOR',
+  },
+  {
+    tipo: 'ACORDO_COMPENSACAO_HORAS',
+    rotulo: 'Acordo de compensacao de horas',
+    descricao: 'Acordo individual ou coletivo de compensacao / banco de horas',
+    validadeMeses: 12,
+    exigeResponsavelTecnico: false,
+    categoria: 'COLABORADOR',
+  },
+  {
+    tipo: 'ORDEM_SERVICO',
+    rotulo: 'Ordem de servico (copia assinada)',
+    descricao: 'OS por funcao assinada pelo trabalhador (NR-1, 1.4.4)',
+    validadeMeses: 12,
+    exigeResponsavelTecnico: false,
+    categoria: 'COLABORADOR',
+  },
+  {
+    tipo: 'FICHA_EPI',
+    rotulo: 'Ficha de EPI (copia assinada)',
+    descricao: 'Ficha de entrega de EPI assinada (NR-6)',
+    validadeMeses: 12,
+    exigeResponsavelTecnico: false,
+    categoria: 'COLABORADOR',
+  },
+  /* --- Meio ambiente ------------------------------------------------------ */
+  {
+    tipo: 'PGRSS',
+    rotulo: 'PGRSS',
+    descricao: 'Plano de Gerenciamento de Residuos de Servicos de Saude (RDC 222)',
+    validadeMeses: 12,
+    exigeResponsavelTecnico: true,
+    categoria: 'AMBIENTAL',
+  },
+  {
+    tipo: 'PGRS',
+    rotulo: 'PGRS',
+    descricao: 'Plano de Gerenciamento de Residuos Solidos (Lei 12.305)',
+    validadeMeses: 12,
+    exigeResponsavelTecnico: true,
+    categoria: 'AMBIENTAL',
+  },
+  {
+    tipo: 'CTR_MANIFESTO',
+    rotulo: 'CTR / Manifesto de residuos',
+    descricao: 'Controle de Transporte de Residuos / MTR',
+    validadeMeses: null,
+    exigeResponsavelTecnico: false,
+    categoria: 'AMBIENTAL',
+  },
+  {
+    tipo: 'INVENTARIO_RESIDUOS',
+    rotulo: 'Inventario de residuos',
+    descricao: 'Inventario anual de residuos gerados',
+    validadeMeses: 12,
+    exigeResponsavelTecnico: false,
+    categoria: 'AMBIENTAL',
+  },
   {
     tipo: 'OUTRO',
     rotulo: 'Outro',
@@ -207,6 +290,19 @@ export const CATALOGO_DOCUMENTOS: readonly DefinicaoDocumento[] = [
     exigeResponsavelTecnico: false,
     categoria: 'OUTRO',
   },
+];
+
+/**
+ * Pasta minima do colaborador: o que a fiscalizacao pede por trabalhador.
+ * ASO e certificados de treinamento vem dos modulos proprios (Aso e
+ * TreinamentoRealizado); os demais sao anexos nesta lista.
+ */
+export const DOCUMENTOS_OBRIGATORIOS_COLABORADOR: readonly TipoDocumento[] = [
+  'FICHA_REGISTRO',
+  'CONTRATO_TRABALHO',
+  'ACORDO_COMPENSACAO_HORAS',
+  'ORDEM_SERVICO',
+  'FICHA_EPI',
 ];
 
 const POR_TIPO = new Map(CATALOGO_DOCUMENTOS.map((definicao) => [definicao.tipo, definicao]));

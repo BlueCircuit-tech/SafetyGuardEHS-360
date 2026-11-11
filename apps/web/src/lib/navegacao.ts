@@ -128,7 +128,11 @@ export const TEMAS: TemaNav[] = [
       {
         titulo: 'Identificação e Avaliação',
         icone: 'mapa',
-        itens: [{ titulo: 'Inventário de Riscos', descricao: 'Identificação, avaliação e classificação', rota: '/riscos', permissao: 'cadastros:ler' }],
+        itens: [
+          { titulo: 'Inventário de Riscos', descricao: 'Identificação, avaliação e classificação', rota: '/riscos', permissao: 'cadastros:ler' },
+          { titulo: 'Produtos Químicos', descricao: 'Inventário, GHS e FDS', rota: '/quimicos', permissao: 'cadastros:ler' },
+          { titulo: 'Ergonomia', descricao: 'Avaliação e checklist NR-17', rota: '/ergonomia', permissao: 'cadastros:ler' },
+        ],
       },
       {
         titulo: 'Controles',
@@ -203,7 +207,8 @@ export const TEMAS: TemaNav[] = [
         icone: 'piramide',
         itens: [
           { titulo: 'Conformidade Legal', descricao: 'ASO e documentos vigentes', rota: '/conformidade', permissao: 'indicadores:ler' },
-          { titulo: 'NRs e requisitos aplicáveis', descricao: 'Em breve' },
+          { titulo: 'CIPA', descricao: 'Mandato, eleição e documentos (NR-5)', rota: '/cipa', permissao: 'cadastros:ler' },
+          { titulo: 'Brigada de Incêndio', descricao: 'Brigadistas, extintores e organograma', rota: '/brigada', permissao: 'cadastros:ler' },
         ],
       },
       {
@@ -247,7 +252,7 @@ export const TEMAS: TemaNav[] = [
       {
         titulo: 'Sustentabilidade',
         icone: 'premio',
-        itens: [{ titulo: 'Ações, metas e resultados', descricao: 'Em breve' }],
+        itens: [{ titulo: 'Aspectos e impactos', descricao: 'Levantamento ISO 14001 e documentos ambientais', rota: '/meio-ambiente', permissao: 'observacoes:ler' }],
       },
     ],
   },
@@ -357,7 +362,11 @@ export const TEMAS: TemaNav[] = [
       {
         titulo: 'Dados Mestres',
         icone: 'pasta',
-        itens: [{ titulo: 'Estruturas do sistema', descricao: 'Em breve' }],
+        itens: [
+          { titulo: 'Fornecedores', descricao: 'Cadastro com telefone e e-mail', rota: '/fornecedores', permissao: 'cadastros:ler' },
+          { titulo: 'Planilha financeira', descricao: 'Receitas, despesas e notas fiscais', rota: '/financeiro/planilha', permissao: 'indicadores:ler' },
+          { titulo: 'Cartão de ponto', descricao: 'Horas trabalhadas por cliente e valor hora', rota: '/ponto' },
+        ],
       },
     ],
   },
@@ -404,6 +413,9 @@ export const PERFIS_USO: Array<{ titulo: string; descricao: string }> = [
 
 /** Relatórios e documentos gerados pelo sistema, reunidos no hub Relatórios. */
 export const RELATORIOS: LinkNav[] = [
+  { titulo: 'Relatório mensal (Excel)', descricao: 'O que foi realizado e as pendências do mês, por cliente', rota: '/relatorios/mensal', permissao: 'indicadores:ler' },
+  { titulo: 'Relatório fotográfico', descricao: 'Fotos das observações e evidências dos planos, por período', rota: '/relatorios/fotografico', permissao: 'indicadores:ler' },
+  { titulo: 'Modelos de relatório', descricao: 'Textos-base da consultoria, com geração assistida', rota: '/relatorios/modelos', permissao: 'indicadores:ler' },
   { titulo: 'Relatório Diário de SSMA', descricao: 'Fechamento do dia com acidentes, desvios e evidências', rota: '/acidentes/relatorio-diario', permissao: 'planos:ler' },
   { titulo: 'Apresentação de plano de ação', descricao: 'Aberta a partir de um plano, pronta para projetar', rota: '/planos-acao', permissao: 'planos:ler' },
   { titulo: 'PPP – Perfil Profissiográfico', descricao: 'Gerado a partir da ficha do colaborador', rota: '/colaboradores', permissao: 'saude:ler' },

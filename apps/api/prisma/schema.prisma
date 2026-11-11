@@ -253,6 +253,10 @@ model EmpresaConsultoria {
   rodapeRelatorio   String? @db.VarChar(500)
   /// Cabecalho aplicado as notificacoes de WhatsApp.
   cabecalhoWhatsapp String? @db.VarChar(160)
+  /// Texto padrao impresso em toda Ordem de Servico (orientacoes gerais, NR-1).
+  textoPadraoOs             String? @db.Text
+  /// Link da plataforma de treinamentos da consultoria (botao na tela de treinamentos).
+  urlPlataformaTreinamentos String? @db.VarChar(300)
 
   // --- Configuracao -------------------------------------------------------
   timezone String  @default("America/Sao_Paulo") @db.VarChar(60)
@@ -314,6 +318,9 @@ model Cliente {
   possuiCipa             Boolean @default(false)
   possuiSesmt            Boolean @default(false)
 
+  /// QR Code unico do cliente: abre a lista de areas para a pessoa escolher onde esta.
+  tokenQr String? @unique @db.VarChar(64)
+
   // --- Interlocutor no cliente --------------------------------------------
   contatoNome     String  @db.VarChar(120)
   contatoCargo    String? @db.VarChar(80)
@@ -361,6 +368,15 @@ model Cliente {
   aprs                  Apr[]
   modelosChecklist      ModeloChecklist[]
   execucoesChecklist    ExecucaoChecklist[]
+  contatos              ContatoCliente[]
+  lancamentos           LancamentoFinanceiro[]
+  registrosPonto        RegistroPonto[]
+  cipas                 Cipa[]
+  avaliacoesErgonomicas AvaliacaoErgonomica[]
+  produtosQuimicos      ProdutoQuimico[]
+  brigadistas           Brigadista[]
+  extintores            Extintor[]
+  aspectosAmbientais    AspectoAmbiental[]
 
   @@unique([empresaId, cnpj])
   @@unique([empresaId, numeroContrato])
@@ -573,6 +589,12 @@ model Area {
   aprs                  Apr[]
   execucoesChecklist    ExecucaoChecklist[]
 
+  brigadistas           Brigadista[]
+  extintores            Extintor[]
+  aspectosAmbientais    AspectoAmbiental[]
+  produtosQuimicos      ProdutoQuimico[]
+  avaliacoesErgonomicas AvaliacaoErgonomica[]
+
   @@unique([clienteId, codigo])
   @@index([clienteId, situacao])
   @@index([clienteId, criticidade])
@@ -715,8 +737,15 @@ model PlanoAcao {
   status              StatusPlano @default(ABERTO)
   dataConclusao       DateTime?
   evidenciaUrl        String?     @db.VarChar(300)
+  /// Foto da situacao encontrada (o "antes"); a evidencia e o "depois".
+  fotoInicialUrl      String?     @db.VarChar(300)
   comentarioConclusao String?     @db.VarChar(1000)
   observacoes         String?     @db.VarChar(1000)
+
+  // --- Cobranca da chefia -----------------------------------------------------
+  /// Quando o plano passou do prazo + carencia da criticidade (10/20/30 dias) e a
+  /// chefia hierarquica do cliente foi avisada por e-mail. Nulo = ainda nao cobrado.
+  cobrancaChefiaEm DateTime?
 
   // --- Escalonamento ---------------------------------------------------------
   /// Degrau ja acionado: 0 Supervisor, 1 Coordenador, 2 Gerente, 3 Corporativa.
@@ -800,9 +829,13 @@ model Usuario {
 
   ativo        Boolean   @default(true)
   ultimoAcesso DateTime?
+  /// Valor da hora do consultor — base do cartao de ponto por cliente.
+  valorHora    Decimal?  @db.Decimal(10, 2)
 
   criadoEm     DateTime @default(now())
   atualizadoEm DateTime @updatedAt
+
+  registrosPonto RegistroPonto[]
 
   @@index([perfil, ativo])
   @@map("usuario")
@@ -888,6 +921,17 @@ enum TipoDocumento {
   FISPQ
   PAE
   PCMAT
+  /// Documentos legais do colaborador (pasta do trabalhador).
+  FICHA_REGISTRO
+  CONTRATO_TRABALHO
+  ACORDO_COMPENSACAO_HORAS
+  ORDEM_SERVICO
+  FICHA_EPI
+  /// Documentos ambientais.
+  PGRSS
+  PGRS
+  CTR_MANIFESTO
+  INVENTARIO_RESIDUOS
   OUTRO
 }
 
@@ -942,12 +986,27 @@ model Colaborador {
   email    String? @db.VarChar(150)
   telefone String? @db.VarChar(11)
 
+  /// Lideranca direta (supervisor/encarregado) — usada em afastamentos e consequencias.
+  liderNome String? @db.VarChar(120)
+  /// Foto 3x4 para carteirinha e fichas.
+  fotoUrl   String? @db.VarChar(300)
+
+  // --- Liberacao para o trabalho --------------------------------------------
+  /// Bloqueio manual (documentacao pendente, medida disciplinar...): impede o acesso ao trabalho.
+  bloqueado      Boolean   @default(false)
+  motivoBloqueio String?   @db.VarChar(300)
+  bloqueadoEm    DateTime?
+
+  /// Token do QR Code da carteirinha — pagina publica de verificacao.
+  tokenCarteirinha String? @unique @db.VarChar(64)
+
   situacao    SituacaoColaborador @default(ATIVO)
   observacoes String?             @db.VarChar(1000)
 
   criadoEm     DateTime @default(now())
   atualizadoEm DateTime @updatedAt
 
+  brigadista    Brigadista[]
   asos          Aso[]
   documentos    DocumentoSsma[]
   treinamentos  TreinamentoRealizado[]
@@ -1230,6 +1289,9 @@ model RegistroDds {
   observacoes      String?  @db.VarChar(1000)
   /// Lista de presenca digitalizada.
   listaPresencaUrl String?  @db.VarChar(300)
+  /// Roteiro do DDS (texto apresentado) — digitado ou gerado pela assistente.
+  conteudo         String?  @db.Text
+  geradoPorIa      Boolean  @default(false)
 
   criadoEm     DateTime @default(now())
   atualizadoEm DateTime @updatedAt
@@ -1265,12 +1327,18 @@ model Epi {
   vidaUtilMeses Int?
   estoqueAtual  Int       @default(0)
   estoqueMinimo Int       @default(0)
+  /// Estoque "cheio" (lote de compra). Sem minimo informado, o ponto de
+  /// reposicao e 10% deste valor.
+  estoqueReferencia Int?
+  categoria     String?   @db.VarChar(60)
   ativo         Boolean   @default(true)
 
   criadoEm     DateTime @default(now())
   atualizadoEm DateTime @updatedAt
 
   entregas EntregaEpi[]
+  anexos   AnexoEpi[]
+  entradas EntradaEpi[]
 
   @@unique([nome, ca])
   @@index([validadeCa])
@@ -1289,6 +1357,13 @@ model EntregaEpi {
   quantidade  Int              @default(1)
   motivo      MotivoEntregaEpi @default(PRIMEIRA_ENTREGA)
   observacoes String?          @db.VarChar(500)
+  /// Proxima troca prevista (data + vida util do EPI). Nulo = troca por desgaste.
+  validadeTroca DateTime? @db.Date
+
+  // --- Assinatura do recebimento (carimbada) ---------------------------------
+  assinaturaUrl  String?   @db.VarChar(300)
+  assinaturaHash String?   @db.VarChar(64)
+  assinaturaEm   DateTime?
 
   criadoEm DateTime @default(now())
 
@@ -1439,9 +1514,13 @@ model Acidente {
   data               DateTime     @db.Date
   tipo               TipoAcidente
   descricao          String       @db.VarChar(2000)
-  parteCorpoAtingida String?      @db.VarChar(120)
+  parteCorpoAtingida String?      @db.VarChar(300)
   comAfastamento     Boolean      @default(false)
   diasAfastamento    Int          @default(0)
+  /// Lesao permanente (NBR 14280): define os dias debitados.
+  lesaoPermanente    String?      @db.VarChar(40)
+  /// Dias debitados pela tabela NBR 14280 (morte 6000, perda de membro 3000, visao de um olho 1800).
+  diasDebitados      Int          @default(0)
 
   catNumero    String?   @db.VarChar(40)
   catEmitidaEm DateTime? @db.Date
@@ -1627,6 +1706,13 @@ model Afastamento {
   cid       String? @db.VarChar(10)
   descricao String? @db.VarChar(500)
 
+  /// Funcao, setor e lideranca no momento do afastamento (fotografia).
+  funcao    String? @db.VarChar(80)
+  setor     String? @db.VarChar(80)
+  liderNome String? @db.VarChar(120)
+  /// Providencias no retorno: REABILITACAO, TREINAMENTO, MUDANCA_FUNCAO, ATIVIDADE_COMPATIVEL.
+  providencias Json?
+
   criadoEm     DateTime @default(now())
   atualizadoEm DateTime @updatedAt
 
@@ -1688,6 +1774,8 @@ model OrdemServico {
   cienciaEm            DateTime?
   cienciaAssinaturaUrl String?   @db.VarChar(300)
   cienciaHash          String?   @db.VarChar(64)
+  /// Copia assinada em papel, digitalizada (PDF ou imagem).
+  arquivoAssinadoUrl   String?   @db.VarChar(300)
 
   criadoEm     DateTime @default(now())
   atualizadoEm DateTime @updatedAt
@@ -1719,11 +1807,16 @@ model Apr {
   codigo String @db.VarChar(20)
   versao Int    @default(1)
 
+  /// APR (padrao) ou AST — Analise de Seguranca da Tarefa (modelo COMAU).
+  modelo      String    @default("APR") @db.VarChar(10)
   atividade   String    @db.VarChar(200)
   local       String?   @db.VarChar(200)
   dataInicio  DateTime  @db.Date
   dataFim     DateTime? @db.Date
   responsavel String    @db.VarChar(120)
+  /// Tipos de servico especiais: ESPACO_CONFINADO, TRABALHO_A_QUENTE, TRABALHO_EM_ALTURA,
+  /// ICAMENTO_DE_CARGA, ESCAVACAO, REQUER_BLOQUEIO.
+  tiposServico Json?
 
   /// [{ etapa, perigos, riscos, medidasControle, epis }]
   etapas Json
@@ -1803,4 +1896,412 @@ model ExecucaoChecklist {
   @@index([clienteId, dataHora])
   @@index([modeloId, dataHora])
   @@map("execucao_checklist")
+}
+
+/**
+ * ==========================================================================
+ * Etapa 24 — Melhorias da plataforma (levantamento da operacao)
+ * ==========================================================================
+ */
+
+/// Contatos hierarquicos do cliente: quem e o supervisor, o coordenador, o
+/// gerente... E o que transforma os papeis da matriz de comunicacao em pessoas
+/// reais com e-mail — a cobranca da chefia e o escalonamento chegam a eles.
+model ContatoCliente {
+  id        String  @id @default(uuid())
+  clienteId String
+  cliente   Cliente @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+
+  nome     String  @db.VarChar(120)
+  cargo    String? @db.VarChar(80)
+  /// Nivel da hierarquia (SUPERVISOR, COORDENADOR, GERENTE, DIRETORIA, SSMA, RH...).
+  nivel    String  @db.VarChar(30)
+  email    String  @db.VarChar(150)
+  telefone String? @db.VarChar(11)
+  whatsapp String? @db.VarChar(11)
+  /// Recebe os alertas e cobrancas do seu nivel.
+  recebeAlertas Boolean @default(true)
+  observacoes   String? @db.VarChar(300)
+
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  @@index([clienteId, nivel])
+  @@map("contato_cliente")
+}
+
+/// Anexos do EPI: laudo, CA, ficha tecnica, nota fiscal.
+model AnexoEpi {
+  id    String @id @default(uuid())
+  epiId String
+  epi   Epi    @relation(fields: [epiId], references: [id], onDelete: Cascade)
+
+  titulo String @db.VarChar(120)
+  /// LAUDO, CA, FICHA_TECNICA, NOTA_FISCAL, OUTRO
+  tipo   String @db.VarChar(20)
+  url    String @db.VarChar(300)
+
+  criadoEm DateTime @default(now())
+
+  @@index([epiId])
+  @@map("anexo_epi")
+}
+
+/// Entrada de estoque (compra): quantidade, custo e nota fiscal.
+model EntradaEpi {
+  id    String @id @default(uuid())
+  epiId String
+  epi   Epi    @relation(fields: [epiId], references: [id], onDelete: Cascade)
+
+  data          DateTime @db.Date
+  quantidade    Int
+  custoUnitario Decimal? @db.Decimal(10, 2)
+  notaFiscal    String?  @db.VarChar(40)
+  fornecedor    String?  @db.VarChar(120)
+  observacoes   String?  @db.VarChar(300)
+
+  criadoEm DateTime @default(now())
+
+  @@index([epiId, data])
+  @@map("entrada_epi")
+}
+
+/// Fornecedores da consultoria (EPI, laboratorios, treinamentos...).
+model Fornecedor {
+  id String @id @default(uuid())
+
+  nome        String  @db.VarChar(150)
+  cnpj        String? @db.VarChar(14)
+  categoria   String? @db.VarChar(80)
+  contatoNome String? @db.VarChar(120)
+  telefone    String? @db.VarChar(11)
+  whatsapp    String? @db.VarChar(11)
+  email       String? @db.VarChar(150)
+  site        String? @db.VarChar(150)
+  observacoes String? @db.VarChar(500)
+  ativo       Boolean @default(true)
+
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  lancamentos LancamentoFinanceiro[]
+
+  @@index([nome])
+  @@map("fornecedor")
+}
+
+enum TipoLancamento {
+  RECEITA
+  DESPESA
+}
+
+enum SituacaoLancamento {
+  PENDENTE
+  PAGO
+  CANCELADO
+}
+
+/// Planilha financeira da consultoria: receitas por cliente e despesas.
+model LancamentoFinanceiro {
+  id        String   @id @default(uuid())
+  clienteId String?
+  cliente   Cliente? @relation(fields: [clienteId], references: [id], onDelete: SetNull)
+  fornecedorId String?
+  fornecedor   Fornecedor? @relation(fields: [fornecedorId], references: [id], onDelete: SetNull)
+
+  tipo       TipoLancamento
+  categoria  String             @db.VarChar(80)
+  descricao  String             @db.VarChar(200)
+  valor      Decimal            @db.Decimal(12, 2)
+  data       DateTime           @db.Date
+  vencimento DateTime?          @db.Date
+  situacao   SituacaoLancamento @default(PENDENTE)
+  notaFiscal String?            @db.VarChar(40)
+  observacoes String?           @db.VarChar(500)
+
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  @@index([data, tipo])
+  @@index([clienteId, data])
+  @@map("lancamento_financeiro")
+}
+
+/// Cartao de ponto do consultor: horas trabalhadas por cliente, valoradas pela hora.
+model RegistroPonto {
+  id        String   @id @default(uuid())
+  usuarioId String
+  usuario   Usuario  @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  clienteId String?
+  cliente   Cliente? @relation(fields: [clienteId], references: [id], onDelete: SetNull)
+
+  data              DateTime  @db.Date
+  entrada           DateTime
+  saida             DateTime?
+  intervaloMinutos  Int       @default(0)
+  atividade         String?   @db.VarChar(300)
+  /// Horas liquidas (saida - entrada - intervalo), persistidas ao fechar o registro.
+  horasTrabalhadas  Decimal?  @db.Decimal(6, 2)
+  /// Valor da hora no momento do registro (fotografia do cadastro do usuario).
+  valorHora         Decimal?  @db.Decimal(10, 2)
+
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  @@index([usuarioId, data])
+  @@index([clienteId, data])
+  @@map("registro_ponto")
+}
+
+enum SituacaoCipa {
+  PLANEJAMENTO
+  PROCESSO_ELEITORAL
+  EM_MANDATO
+  ENCERRADA
+}
+
+/// Gestao da CIPA (NR-5): mandato, processo eleitoral, membros e documentos.
+model Cipa {
+  id        String  @id @default(uuid())
+  clienteId String
+  cliente   Cliente @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+
+  /// Ex.: "2026/2027".
+  gestao            String       @db.VarChar(20)
+  dataInicioMandato DateTime     @db.Date
+  dataFimMandato    DateTime     @db.Date
+  situacao          SituacaoCipa @default(PLANEJAMENTO)
+
+  /// Cronograma do processo eleitoral: [{ etapa, data, concluida }].
+  cronograma Json?
+  /// Membros: [{ nome, funcao, setor, representacao: EMPREGADOR|EMPREGADOS, tipo: TITULAR|SUPLENTE, cargo?: PRESIDENTE|VICE|SECRETARIO, votos? }].
+  membros    Json?
+  observacoes String? @db.Text
+
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  documentos CipaDocumento[]
+
+  @@index([clienteId, situacao])
+  @@map("cipa")
+}
+
+/// Documento da CIPA: edital, ficha de inscricao, lista de presenca, cedula, ata, certificado.
+model CipaDocumento {
+  id     String @id @default(uuid())
+  cipaId String
+  cipa   Cipa   @relation(fields: [cipaId], references: [id], onDelete: Cascade)
+
+  /// EDITAL, FICHA_INSCRICAO, LISTA_PRESENCA_VOTACAO, CEDULA_VOTACAO, ATA_ELEICAO, ATA_POSSE, ATA_REUNIAO, CERTIFICADO_TREINAMENTO, CALENDARIO, OUTRO
+  tipo        String    @db.VarChar(30)
+  titulo      String    @db.VarChar(150)
+  url         String    @db.VarChar(300)
+  data        DateTime? @db.Date
+  observacoes String?   @db.VarChar(300)
+
+  criadoEm DateTime @default(now())
+
+  @@index([cipaId])
+  @@map("cipa_documento")
+}
+
+/// Avaliacao ergonomica (NR-17): checklist pontuado por area ou funcao.
+model AvaliacaoErgonomica {
+  id        String  @id @default(uuid())
+  clienteId String
+  cliente   Cliente @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  areaId    String?
+  area      Area?   @relation(fields: [areaId], references: [id], onDelete: SetNull)
+
+  funcao    String?  @db.VarChar(80)
+  data      DateTime @db.Date
+  avaliador String   @db.VarChar(120)
+  /// CHECKLIST (preliminar), AEP (avaliacao ergonomica preliminar) ou AET (analise ergonomica do trabalho).
+  tipo      String   @db.VarChar(12) @default("CHECKLIST")
+
+  /// [{ categoria, item, conforme: boolean|null, observacao }]
+  itens      Json
+  /// % de itens conformes.
+  pontuacao  Int?
+  /// BAIXO, MEDIO, ALTO — derivado da pontuacao.
+  nivelRisco String? @db.VarChar(10)
+
+  conclusao     String? @db.Text
+  recomendacoes String? @db.Text
+  arquivoUrl    String? @db.VarChar(300)
+
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  @@index([clienteId, data])
+  @@map("avaliacao_ergonomica")
+}
+
+/// Inventario de produtos quimicos com classificacao GHS e FDS.
+model ProdutoQuimico {
+  id        String  @id @default(uuid())
+  clienteId String
+  cliente   Cliente @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  areaId    String?
+  area      Area?   @relation(fields: [areaId], references: [id], onDelete: SetNull)
+
+  nome       String  @db.VarChar(150)
+  fabricante String? @db.VarChar(120)
+  numeroCas  String? @db.VarChar(20)
+  /// Estado fisico: SOLIDO, LIQUIDO, GAS, AEROSSOL.
+  estadoFisico String? @db.VarChar(12)
+
+  /// Pictogramas GHS: ["GHS02", "GHS07", ...]
+  pictogramas       Json?
+  /// PERIGO ou ATENCAO.
+  palavraAdvertencia String? @db.VarChar(10)
+  frasesPerigo       String? @db.VarChar(500)
+  /// Classe de perigo resumida (inflamavel, corrosivo, toxico...).
+  classificacao      String? @db.VarChar(200)
+
+  localArmazenamento String?  @db.VarChar(150)
+  quantidadeEstoque  Decimal? @db.Decimal(12, 2)
+  unidade            String?  @db.VarChar(10)
+  episNecessarios    String?  @db.VarChar(300)
+  medidasControle    String?  @db.VarChar(500)
+
+  /// FDS (ficha com dados de seguranca) anexada e sua validade.
+  fdsUrl      String?   @db.VarChar(300)
+  fdsValidade DateTime? @db.Date
+
+  observacoes String? @db.VarChar(500)
+  ativo       Boolean @default(true)
+
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  @@index([clienteId, nome])
+  @@map("produto_quimico")
+}
+
+enum FuncaoBrigada {
+  COORDENADOR
+  CHEFE
+  LIDER
+  BRIGADISTA
+}
+
+/// Brigada de incendio: membros, funcao na brigada, treinamento e reciclagem.
+model Brigadista {
+  id            String      @id @default(uuid())
+  clienteId     String
+  cliente       Cliente     @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  colaboradorId String
+  colaborador   Colaborador @relation(fields: [colaboradorId], references: [id], onDelete: Cascade)
+  areaId        String?
+  area          Area?       @relation(fields: [areaId], references: [id], onDelete: SetNull)
+
+  funcaoBrigada       FuncaoBrigada @default(BRIGADISTA)
+  turno               String?       @db.VarChar(40)
+  dataTreinamento     DateTime?     @db.Date
+  validadeTreinamento DateTime?     @db.Date
+  certificadoUrl      String?       @db.VarChar(300)
+  fotoUrl             String?       @db.VarChar(300)
+  ativo               Boolean       @default(true)
+  observacoes         String?       @db.VarChar(300)
+
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  @@unique([clienteId, colaboradorId])
+  @@index([clienteId, ativo])
+  @@map("brigadista")
+}
+
+enum TipoExtintor {
+  AGUA
+  PO_ABC
+  PO_BC
+  CO2
+  ESPUMA
+  CLASSE_K
+  OUTRO
+}
+
+enum SituacaoExtintor {
+  OK
+  VENCIDO
+  EM_MANUTENCAO
+  OBSTRUIDO
+}
+
+/// Controle de extintores: localizacao, validades e inspecao.
+model Extintor {
+  id        String  @id @default(uuid())
+  clienteId String
+  cliente   Cliente @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  areaId    String?
+  area      Area?   @relation(fields: [areaId], references: [id], onDelete: SetNull)
+
+  numero      String       @db.VarChar(30)
+  tipo        TipoExtintor
+  capacidade  String?      @db.VarChar(20)
+  localizacao String       @db.VarChar(150)
+
+  validadeCarga             DateTime? @db.Date
+  validadeTesteHidrostatico DateTime? @db.Date
+  ultimaInspecao            DateTime? @db.Date
+  situacao                  SituacaoExtintor @default(OK)
+  observacoes               String?   @db.VarChar(300)
+
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  @@unique([clienteId, numero])
+  @@index([clienteId, situacao])
+  @@map("extintor")
+}
+
+/// Levantamento de aspectos e impactos ambientais (ISO 14001).
+model AspectoAmbiental {
+  id        String  @id @default(uuid())
+  clienteId String
+  cliente   Cliente @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  areaId    String?
+  area      Area?   @relation(fields: [areaId], references: [id], onDelete: SetNull)
+
+  atividade String @db.VarChar(150)
+  aspecto   String @db.VarChar(150)
+  impacto   String @db.VarChar(200)
+  /// NORMAL, ANORMAL ou EMERGENCIA.
+  condicao  String @db.VarChar(12) @default("NORMAL")
+
+  severidade    Int
+  probabilidade Int
+  /// Severidade x probabilidade.
+  significancia Int
+  significativo Boolean @default(false)
+
+  controles      String? @db.VarChar(500)
+  requisitoLegal String? @db.VarChar(200)
+  responsavel    String? @db.VarChar(120)
+
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  @@index([clienteId, significativo])
+  @@map("aspecto_ambiental")
+}
+
+/// Modelos de relatorio da consultoria (texto com marcadores), geraveis com assistente.
+model ModeloRelatorio {
+  id String @id @default(uuid())
+
+  titulo    String  @db.VarChar(150)
+  categoria String? @db.VarChar(60)
+  descricao String? @db.VarChar(300)
+  /// Texto do modelo em Markdown, com marcadores como {{cliente}}, {{periodo}}.
+  conteudo  String  @db.Text
+  ativo     Boolean @default(true)
+
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  @@map("modelo_relatorio")
 }

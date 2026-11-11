@@ -30,6 +30,14 @@ import { rotasUsuarios } from './modules/usuarios/usuario.routes.js';
 import { rotasReferencias } from './modules/referencias/referencias.routes.js';
 import { registrarRotasFinanceiro as rotasFinanceiro } from './modules/financeiro/financeiro.routes.js';
 import { registrarRotasDocumentacaoTecnica as rotasDocumentacaoTecnica } from './modules/documentacao-tecnica/documentacao.routes.js';
+import { registrarRotasCipa as rotasCipa } from './modules/cipa/cipa.routes.js';
+import { registrarRotasErgonomia as rotasErgonomia } from './modules/ergonomia/ergonomia.routes.js';
+import { registrarRotasQuimicos as rotasQuimicos } from './modules/quimicos/quimicos.routes.js';
+import { registrarRotasBrigada as rotasBrigada } from './modules/brigada/brigada.routes.js';
+import { registrarRotasFornecedores as rotasFornecedores } from './modules/fornecedores/fornecedor.routes.js';
+import { registrarRotasPonto as rotasPonto } from './modules/ponto/ponto.routes.js';
+import { registrarRotasPlanilhaFinanceira as rotasPlanilhaFinanceira } from './modules/financeiro/planilha.routes.js';
+import { registrarRotasRelatorios as rotasRelatorios } from './modules/relatorios/relatorios.routes.js';
 import { prisma } from './db.js';
 
 export const PREFIXO_API = '/api/v1';
@@ -110,6 +118,14 @@ export async function criarApp(): Promise<FastifyInstance> {
       await api.register(rotasRiscos);
       await api.register(rotasFinanceiro);
       await api.register(rotasDocumentacaoTecnica);
+      await api.register(rotasCipa);
+      await api.register(rotasErgonomia);
+      await api.register(rotasQuimicos);
+      await api.register(rotasBrigada);
+      await api.register(rotasFornecedores);
+      await api.register(rotasPonto);
+      await api.register(rotasPlanilhaFinanceira);
+      await api.register(rotasRelatorios);
       await api.register(async (referencias) => {
         referencias.addHook('preHandler', app.autenticar);
         await referencias.register(rotasReferencias);
