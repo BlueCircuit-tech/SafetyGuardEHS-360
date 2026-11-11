@@ -3723,3 +3723,29 @@ a.stat:hover {
 .ajuda-expansivel li + li {
   margin-top: 4px;
 }
+
+/* Documentos em paisagem (APR): o @page nomeado so vale onde a folha o pede. */
+@page paisagem {
+  size: A4 landscape;
+  margin: 10mm;
+}
+
+.folha-paisagem {
+  page: paisagem;
+}
+
+.folha-logos {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.folha-logos img {
+  max-height: 48px;
+  max-width: 160px;
+  object-fit: contain;
+}
+
+.assinatura-canvas {
+  max-width: 520px;
+}

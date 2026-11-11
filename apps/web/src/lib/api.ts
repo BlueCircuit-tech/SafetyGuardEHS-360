@@ -151,3 +151,32 @@ export function urlAbsoluta(caminho: string | null | undefined): string | null {
   if (/^https?:\/\//i.test(caminho)) return caminho;
   return `${API_URL}${caminho}`;
 }
+
+/**
+ * Baixa um arquivo gerado pela API (Excel, PDF) com o token da sessao e abre
+ * o dialogo de "salvar como" do navegador.
+ */
+export async function baixarArquivo(caminho: string, nomeArquivo: string): Promise<void> {
+  const resposta = await fetch(`${BASE}${caminho}`, {
+    headers: lerTokenSalvo() ? { Authorization: `Bearer ${lerTokenSalvo()}` } : {},
+  });
+  if (!resposta.ok) {
+    const texto = await resposta.text();
+    let corpo: CorpoErro | null = null;
+    try {
+      corpo = texto ? (JSON.parse(texto) as CorpoErro) : null;
+    } catch {
+      corpo = null;
+    }
+    throw new ErroApi(resposta.status, corpo, 'Falha ao gerar o arquivo.');
+  }
+  const blob = await resposta.blob();
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = nomeArquivo;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 10_000);
+}

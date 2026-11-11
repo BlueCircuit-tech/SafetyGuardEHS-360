@@ -629,6 +629,26 @@ export function EmpresaPage() {
                 <Campo label="Cabecalho das mensagens de WhatsApp" erro={erro('cabecalhoWhatsapp')}>
                   <input {...register('cabecalhoWhatsapp')} placeholder="*SafetyGuard EHS 360* — notificacao automatica" />
                 </Campo>
+
+                <Campo
+                  label="Texto padrão da Ordem de Serviço"
+                  erro={erro('textoPadraoOs')}
+                  ajuda="Impresso em toda OS, antes dos riscos da função: orientações gerais, proibições, direitos e deveres (NR-1, 1.4.1)."
+                >
+                  <textarea
+                    rows={6}
+                    {...register('textoPadraoOs')}
+                    placeholder="1. Cumprir as normas de segurança e os procedimentos da empresa. 2. Usar os EPIs fornecidos e zelar por eles. 3. Comunicar imediatamente qualquer condição insegura..."
+                  />
+                </Campo>
+
+                <Campo
+                  label="Link da plataforma de treinamentos"
+                  erro={erro('urlPlataformaTreinamentos')}
+                  ajuda="Aparece como atalho na tela de Treinamentos."
+                >
+                  <input type="url" {...register('urlPlataformaTreinamentos')} placeholder="https://treinamentos.suaempresa.com.br" />
+                </Campo>
               </section>
 
               {/* ------------------------------------------ operacao ----- */}

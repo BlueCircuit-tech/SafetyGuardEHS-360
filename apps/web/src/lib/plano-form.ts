@@ -42,6 +42,8 @@ export interface PlanoApi {
   status: StatusPlano;
   dataConclusao: string | null;
   evidenciaUrl: string | null;
+  fotoInicialUrl: string | null;
+  cobrancaChefiaEm: string | null;
   comentarioConclusao: string | null;
   observacoes: string | null;
   nivelEscalonamento: number;
@@ -160,6 +162,7 @@ export const VALORES_INICIAIS_PLANO: PlanoAcaoFormValues = {
   status: 'ABERTO',
   dataConclusao: '',
   evidenciaUrl: '',
+  fotoInicialUrl: '',
   comentarioConclusao: '',
   observacoes: '',
 };

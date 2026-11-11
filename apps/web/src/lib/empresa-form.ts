@@ -46,6 +46,8 @@ export interface EmpresaApi extends Record<string, unknown> {
   assinaturaEmail: string | null;
   rodapeRelatorio: string | null;
   cabecalhoWhatsapp: string | null;
+  textoPadraoOs: string | null;
+  urlPlataformaTreinamentos: string | null;
   timezone: string;
   ativa: boolean;
   criadoEm: string;
@@ -87,6 +89,8 @@ export const VALORES_INICIAIS: EmpresaFormValues = {
   assinaturaEmail: '',
   rodapeRelatorio: '',
   cabecalhoWhatsapp: '',
+  textoPadraoOs: '',
+  urlPlataformaTreinamentos: '',
   timezone: TIMEZONE_PADRAO,
   ativa: true,
 };
@@ -132,6 +136,8 @@ export function empresaParaFormulario(empresa: EmpresaApi): EmpresaFormValues {
     assinaturaEmail: texto(empresa.assinaturaEmail),
     rodapeRelatorio: texto(empresa.rodapeRelatorio),
     cabecalhoWhatsapp: texto(empresa.cabecalhoWhatsapp),
+    textoPadraoOs: texto(empresa.textoPadraoOs),
+    urlPlataformaTreinamentos: texto(empresa.urlPlataformaTreinamentos),
     timezone: empresa.timezone,
     ativa: empresa.ativa,
   };

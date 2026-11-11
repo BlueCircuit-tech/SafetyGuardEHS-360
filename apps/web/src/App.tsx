@@ -53,6 +53,13 @@ import { AprPage } from './paginas/AprPage';
 import { ChecklistsPage } from './paginas/ChecklistsPage';
 import { InicioPage } from './paginas/InicioPage';
 import { ModuloPage, ModulosPage } from './paginas/ModulosPage';
+import { CarteirinhaPage } from './paginas/CarteirinhaPage';
+import { VerificarCarteirinhaPage } from './paginas/VerificarCarteirinhaPage';
+import { InspecaoClientePage } from './paginas/InspecaoClientePage';
+import { LiberacaoEquipePage } from './paginas/LiberacaoEquipePage';
+import { RelatorioAsoPage } from './paginas/RelatorioAsoPage';
+import { RelatorioMensalPage } from './paginas/RelatorioMensalPage';
+import { FichaEpiPage } from './paginas/FichaEpiPage';
 import { AjudaPage, ConfiguracoesHubPage, IndicadoresHubPage, RelatoriosHubPage } from './paginas/HubsPage';
 import { CipaPage } from './paginas/CipaPage';
 import { ErgonomiaPage } from './paginas/ErgonomiaPage';
@@ -142,6 +149,8 @@ export function App() {
 
             {/* A tela de campo do QR Code é pública: o token é a credencial. */}
             <Route path="/inspecao/:token" element={<LeituraQrPage />} />
+            <Route path="/inspecao-cliente/:token" element={<InspecaoClientePage />} />
+            <Route path="/carteirinha/:token" element={<VerificarCarteirinhaPage />} />
 
             <Route element={<Layout />}>
               <Route index element={<Navigate to="/inicio" replace />} />
@@ -186,6 +195,11 @@ export function App() {
               {rota('colaboradores/novo', 'saude:escrever', <ColaboradorFormPage />)}
               {rota('colaboradores/:id', 'saude:ler', <ColaboradorFormPage />)}
               {rota('colaboradores/:id/ppp', 'saude:ler', <PppPage />)}
+              {rota('colaboradores/:id/carteirinha', 'saude:ler', <CarteirinhaPage />)}
+              {rota('colaboradores/:id/ficha-epi', 'cadastros:ler', <FichaEpiPage />)}
+              {rota('liberacao-equipe', 'saude:ler', <LiberacaoEquipePage />)}
+              {rota('relatorios/aso', 'saude:ler', <RelatorioAsoPage />)}
+              {rota('relatorios/mensal', 'indicadores:ler', <RelatorioMensalPage />)}
 
               {rota('documentos', 'saude:ler', <DocumentosPage />)}
               {rota('documentos/novo', 'saude:escrever', <DocumentoFormPage />)}

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { ROTULO_SITUACAO_OS, type OsEpi, type OsRisco, type OsTreinamento, type SituacaoOs } from '@safetyguard/shared';
+import { AssinaturaCanvas } from '../componentes/AssinaturaCanvas';
 import { Campo } from '../componentes/Campo';
 import { Icone } from '../componentes/Icone';
 import { useToast } from '../componentes/Toast';
@@ -24,9 +25,24 @@ interface OsApi {
   cienciaEm: string | null;
   cienciaAssinaturaUrl: string | null;
   cienciaHash: string | null;
+  arquivoAssinadoUrl?: string | null;
   cliente?: { id: string; nomeFantasia: string };
   colaborador?: { id: string; nome: string; cpf: string; matricula: string | null; funcao: string; setor: string | null };
   rotulos?: { situacao: string };
+}
+
+interface EmpresaApi {
+  nomeFantasia: string | null;
+  logoUrl: string | null;
+  textoPadraoOs: string | null;
+}
+
+interface VerificacaoOs {
+  carimbada: boolean;
+  valida: boolean | null;
+  hash?: string;
+  cienciaEm?: string;
+  mensagem: string;
 }
 
 interface Resumo {
@@ -66,6 +82,16 @@ export function OrdensServicoPage() {
   const [gerando, setGerando] = useState(false);
   const [aberta, setAberta] = useState<OsApi | null>(null);
 
+  // OS aberta: texto padrao, logos, edicao, assinatura e verificacao.
+  const [empresa, setEmpresa] = useState<EmpresaApi | null>(null);
+  const [logoCliente, setLogoCliente] = useState<string | null>(null);
+  const [editandoTexto, setEditandoTexto] = useState(false);
+  const [textoEdicao, setTextoEdicao] = useState('');
+  const [erroTexto, setErroTexto] = useState<string | undefined>(undefined);
+  const [assinandoTela, setAssinandoTela] = useState(false);
+  const [enviando, setEnviando] = useState(false);
+  const [verificacao, setVerificacao] = useState<VerificacaoOs | null>(null);
+
   const carregar = useCallback(async () => {
     setCarregando(true);
     try {
@@ -97,6 +123,29 @@ export function OrdensServicoPage() {
     void carregar();
   }, [carregar]);
 
+  useEffect(() => {
+    void api.get<EmpresaApi>('/empresa').then(setEmpresa).catch(() => setEmpresa(null));
+  }, []);
+
+  // Ao trocar de OS: zera os estados da folha e busca o logo do cliente.
+  const abertaId = aberta?.id ?? null;
+  const abertaClienteId = aberta?.cliente?.id ?? null;
+  useEffect(() => {
+    setEditandoTexto(false);
+    setAssinandoTela(false);
+    setVerificacao(null);
+    setErroTexto(undefined);
+  }, [abertaId]);
+
+  useEffect(() => {
+    setLogoCliente(null);
+    if (!abertaClienteId) return;
+    api
+      .get<{ logoUrl: string | null }>(`/clientes/${abertaClienteId}`)
+      .then((c) => setLogoCliente(c.logoUrl))
+      .catch(() => setLogoCliente(null));
+  }, [abertaClienteId]);
+
   async function emitir() {
     setGerando(true);
     try {
@@ -116,13 +165,57 @@ export function OrdensServicoPage() {
   }
 
   async function registrarCiencia(os: OsApi, arquivo: File) {
+    setEnviando(true);
     try {
       const atualizada = await api.upload<OsApi>(`/ordens-servico/${os.id}/ciencia`, arquivo);
       mostrar('Ciência registrada com carimbo.', 'sucesso');
       setAberta(atualizada);
+      setAssinandoTela(false);
+      setVerificacao(null);
       void carregar();
     } catch (erro) {
       mostrar(erro instanceof Error ? erro.message : 'Falha ao registrar a ciência.', 'erro');
+    } finally {
+      setEnviando(false);
+    }
+  }
+
+  async function salvarTexto(os: OsApi) {
+    setEnviando(true);
+    setErroTexto(undefined);
+    try {
+      const atualizada = await api.put<OsApi>(`/ordens-servico/${os.id}`, { medidasPreventivas: textoEdicao });
+      mostrar('Texto complementar atualizado.', 'sucesso');
+      setAberta(atualizada);
+      setEditandoTexto(false);
+      void carregar();
+    } catch (erro) {
+      if (erro instanceof ErroApi) setErroTexto(erro.campos.medidasPreventivas?.[0]);
+      mostrar(erro instanceof ErroApi ? erro.mensagemAmigavel() : 'Falha ao salvar o texto.', 'erro');
+    } finally {
+      setEnviando(false);
+    }
+  }
+
+  async function anexarCopiaAssinada(os: OsApi, arquivo: File) {
+    setEnviando(true);
+    try {
+      const atualizada = await api.upload<OsApi>(`/ordens-servico/${os.id}/arquivo-assinado`, arquivo);
+      mostrar('Cópia assinada anexada.', 'sucesso');
+      setAberta(atualizada);
+      void carregar();
+    } catch (erro) {
+      mostrar(erro instanceof Error ? erro.message : 'Falha ao anexar a cópia assinada.', 'erro');
+    } finally {
+      setEnviando(false);
+    }
+  }
+
+  async function verificar(os: OsApi) {
+    try {
+      setVerificacao(await api.get<VerificacaoOs>(`/ordens-servico/${os.id}/verificar`));
+    } catch (erro) {
+      mostrar(erro instanceof Error ? erro.message : 'Falha ao verificar a autenticidade.', 'erro');
     }
   }
 
@@ -135,23 +228,126 @@ export function OrdensServicoPage() {
             <button type="button" className="btn btn-ghost" onClick={() => setAberta(null)}>
               <Icone nome="voltar" /> Voltar à lista
             </button>
-            <div style={{ display: 'flex', gap: 8 }}>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               {podeEscrever && os.situacao === 'EMITIDA' ? (
-                <label className="btn btn-primary">
-                  <Icone nome="camera" /> Registrar ciência (foto da assinatura)
-                  <input type="file" hidden accept="image/*" onChange={(e) => e.target.files?.[0] && void registrarCiencia(os, e.target.files[0])} />
+                <>
+                  <button type="button" className="btn btn-primary" disabled={enviando} onClick={() => setAssinandoTela(!assinandoTela)}>
+                    <Icone nome="ferramenta" /> Assinar na tela
+                  </button>
+                  <label className="btn btn-outline">
+                    <Icone nome="camera" /> Foto/arquivo da assinatura
+                    <input
+                      type="file"
+                      hidden
+                      accept="image/*"
+                      disabled={enviando}
+                      onChange={(e) => {
+                        const arquivo = e.target.files?.[0];
+                        e.target.value = '';
+                        if (arquivo) void registrarCiencia(os, arquivo);
+                      }}
+                    />
+                  </label>
+                  {!editandoTexto ? (
+                    <button
+                      type="button"
+                      className="btn btn-outline"
+                      onClick={() => {
+                        setTextoEdicao(os.medidasPreventivas ?? '');
+                        setErroTexto(undefined);
+                        setEditandoTexto(true);
+                      }}
+                    >
+                      <Icone nome="documento" /> Editar texto complementar
+                    </button>
+                  ) : null}
+                </>
+              ) : null}
+              {podeEscrever ? (
+                <label className="btn btn-outline">
+                  <Icone nome="anexo" /> {os.arquivoAssinadoUrl ? 'Substituir cópia assinada (PDF)' : 'Anexar cópia assinada (PDF)'}
+                  <input
+                    type="file"
+                    hidden
+                    accept="application/pdf,image/*"
+                    disabled={enviando}
+                    onChange={(e) => {
+                      const arquivo = e.target.files?.[0];
+                      e.target.value = '';
+                      if (arquivo) void anexarCopiaAssinada(os, arquivo);
+                    }}
+                  />
                 </label>
               ) : null}
+              {os.arquivoAssinadoUrl ? (
+                <a className="btn btn-ghost" href={urlAbsoluta(os.arquivoAssinadoUrl) ?? '#'} target="_blank" rel="noopener noreferrer">
+                  <Icone nome="link" /> Ver cópia assinada
+                </a>
+              ) : null}
+              <button type="button" className="btn btn-ghost" onClick={() => void verificar(os)}>
+                <Icone nome="escudo" /> Verificar autenticidade
+              </button>
               <button type="button" className="btn btn-ghost" onClick={() => window.print()}>
                 <Icone nome="impressora" /> Imprimir
               </button>
             </div>
           </div>
+          {verificacao ? (
+            <p
+              className="hint"
+              style={{
+                color: verificacao.valida === true ? 'var(--green)' : verificacao.valida === false ? 'var(--red)' : undefined,
+                fontWeight: 600,
+              }}
+            >
+              <Icone nome={verificacao.valida === true ? 'ok' : 'alerta'} /> {verificacao.mensagem}
+              {verificacao.hash ? <span className="carimbo"> · sha256 {verificacao.hash}</span> : null}
+            </p>
+          ) : null}
+          <p className="hint">
+            Assinatura do trabalhador: na tela (dedo/mouse) ou foto da assinatura no papel — as duas recebem carimbo
+            (hash do conteúdo + signatário + momento). Reconhecimento facial ou digital depende de leitor biométrico
+            dedicado, ainda não integrado.
+          </p>
+          {assinandoTela && os.situacao === 'EMITIDA' ? (
+            <AssinaturaCanvas
+              rotulo={`${os.colaborador?.nome ?? 'Trabalhador'}: assine para registrar a ciência da ${os.codigo}`}
+              enviando={enviando}
+              aoCancelar={() => setAssinandoTela(false)}
+              aoConfirmar={(arquivo) => registrarCiencia(os, arquivo)}
+            />
+          ) : null}
+          {editandoTexto && os.situacao === 'EMITIDA' ? (
+            <div style={{ marginTop: 12 }}>
+              <Campo
+                label="Texto complementar (medidas preventivas e orientações)"
+                htmlFor="os-edicao"
+                erro={erroTexto}
+                ajuda="O cliente pode ajustar este texto enquanto a OS aguarda ciência. Depois da assinatura, gere nova versão."
+              >
+                <textarea id="os-edicao" rows={6} value={textoEdicao} onChange={(e) => setTextoEdicao(e.target.value)} maxLength={2000} />
+              </Campo>
+              <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                <button type="button" className="btn btn-primary btn-sm" disabled={enviando} onClick={() => void salvarTexto(os)}>
+                  {enviando ? 'Salvando...' : 'Salvar texto'}
+                </button>
+                <button type="button" className="btn btn-ghost btn-sm" disabled={enviando} onClick={() => setEditandoTexto(false)}>
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          ) : null}
         </div>
 
         <div className="painel folha">
           <div className="folha-cabecalho">
             <div>
+              {empresa?.logoUrl || logoCliente ? (
+                <div className="folha-logos" style={{ marginBottom: 8 }}>
+                  {empresa?.logoUrl ? <img src={urlAbsoluta(empresa.logoUrl) ?? undefined} alt={`Logo ${empresa.nomeFantasia ?? 'consultoria'}`} /> : null}
+                  {logoCliente ? <img src={urlAbsoluta(logoCliente) ?? undefined} alt={`Logo ${os.cliente?.nomeFantasia ?? 'cliente'}`} /> : null}
+                </div>
+              ) : null}
               <h2>Ordem de Serviço {os.codigo}</h2>
               <div className="hint">
                 {os.cliente?.nomeFantasia} · versão {os.versao} · NR-1 item 1.4.4
@@ -260,9 +456,21 @@ export function OrdensServicoPage() {
             </div>
           </div>
 
+          {/* Texto padrao da empresa (o modelo oficial sera trocado quando o Valmir enviar). */}
+          {empresa?.textoPadraoOs?.trim() ? (
+            <div className="folha-secao">
+              <h4>Orientações gerais</h4>
+              <p style={{ whiteSpace: 'pre-wrap', fontSize: 13 }}>{empresa.textoPadraoOs}</p>
+            </div>
+          ) : (
+            <p className="hint sem-impressao">
+              Sem texto padrão de OS. Cadastre em Configurações &gt; Empresa (campo “Texto padrão da OS”) para imprimir em toda OS.
+            </p>
+          )}
+
           {os.medidasPreventivas ? (
             <div className="folha-secao">
-              <h4>Medidas preventivas e orientações</h4>
+              <h4>Medidas preventivas e orientações complementares</h4>
               <p style={{ whiteSpace: 'pre-wrap' }}>{os.medidasPreventivas}</p>
             </div>
           ) : null}

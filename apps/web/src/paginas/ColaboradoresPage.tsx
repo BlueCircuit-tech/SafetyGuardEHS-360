@@ -14,15 +14,19 @@ import {
 } from '@safetyguard/shared';
 import { Campo } from '../componentes/Campo';
 import { useToast } from '../componentes/Toast';
-import { api } from '../lib/api';
+import { ErroApi, api, baixarArquivo } from '../lib/api';
 import { formatarDataIso } from '../lib/datas';
+import { MASCARAS } from '../lib/mascaras';
 import {
+  DIAS_ALERTA_ASO,
   PILL_GRAU_RISCO,
   PILL_SITUACAO_COLABORADOR,
   PILL_VENCIMENTO,
   textoPrazo,
+  type AsoAVencerApi,
   type ColaboradorApi,
   type Paginado,
+  type PendenciasDocumentacaoApi,
 } from '../lib/saude';
 import { useSessao } from '../lib/sessao';
 
@@ -32,6 +36,23 @@ interface OpcaoCliente {
 }
 
 const POR_PAGINA = 20;
+/**
+ * Os filtros de ASO sao aplicados pelo servidor depois da paginacao do banco;
+ * com paginas maiores o resultado fica praticamente completo.
+ */
+const POR_PAGINA_FILTRO_ASO = 200;
+
+type FiltroAso = '' | 'VALIDOS' | 'VIGENTE' | 'A_VENCER' | 'VENCIDO' | 'SEM_ASO';
+type FiltroLiberacao = '' | 'true' | 'false';
+
+const OPCOES_FILTRO_ASO: { valor: FiltroAso; rotulo: string }[] = [
+  { valor: '', rotulo: 'Todos' },
+  { valor: 'VALIDOS', rotulo: 'Válidos (vigente + a vencer)' },
+  { valor: 'VIGENTE', rotulo: 'Vigente' },
+  { valor: 'A_VENCER', rotulo: `A vencer (${DIAS_ALERTA_ASO} dias)` },
+  { valor: 'VENCIDO', rotulo: 'Vencido' },
+  { valor: 'SEM_ASO', rotulo: 'Sem ASO' },
+];
 
 export function ColaboradoresPage() {
   const { mostrar } = useToast();
@@ -50,7 +71,12 @@ export function ColaboradoresPage() {
   const [grauRisco, setGrauRisco] = useState<GrauRiscoFuncao | ''>('');
   const [situacao, setSituacao] = useState<SituacaoColaborador | ''>('ATIVO');
   const [somenteIrregulares, setSomenteIrregulares] = useState(false);
+  const [filtroAso, setFiltroAso] = useState<FiltroAso>('');
+  const [liberacao, setLiberacao] = useState<FiltroLiberacao>('');
   const [numeroPagina, setNumeroPagina] = useState(1);
+  const [asosAVencer, setAsosAVencer] = useState<AsoAVencerApi[] | null>(null);
+  const [pendencias, setPendencias] = useState<PendenciasDocumentacaoApi | null>(null);
+  const [baixando, setBaixando] = useState(false);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -67,27 +93,62 @@ export function ColaboradoresPage() {
       .catch(() => setClientes([]));
   }, []);
 
+  // Alertas do topo: ASO vencendo em 35 dias e pendencias de documentacao.
+  useEffect(() => {
+    const filtroCliente = clienteId ? `?clienteId=${clienteId}` : '';
+    setAsosAVencer(null);
+    setPendencias(null);
+    void api
+      .get<AsoAVencerApi[]>(`/asos/a-vencer${filtroCliente}`)
+      .then(setAsosAVencer)
+      .catch(() => setAsosAVencer([]));
+    void api
+      .get<PendenciasDocumentacaoApi>(`/colaboradores/documentacao/pendencias${filtroCliente}`)
+      .then(setPendencias)
+      .catch(() => setPendencias(null));
+  }, [clienteId]);
+
+  const filtraAso = Boolean(filtroAso || somenteIrregulares);
+
   const consulta = useMemo(() => {
-    const parametros = new URLSearchParams({ pagina: String(numeroPagina), porPagina: String(POR_PAGINA) });
+    const parametros = new URLSearchParams({
+      pagina: String(numeroPagina),
+      porPagina: String(filtraAso ? POR_PAGINA_FILTRO_ASO : POR_PAGINA),
+    });
     if (buscaAplicada) parametros.set('busca', buscaAplicada);
     if (clienteId) parametros.set('clienteId', clienteId);
     if (vinculo) parametros.set('vinculo', vinculo);
     if (grauRisco) parametros.set('grauRisco', grauRisco);
     if (situacao) parametros.set('situacao', situacao);
     if (somenteIrregulares) parametros.set('asoIrregular', 'true');
+    if (liberacao) parametros.set('bloqueado', liberacao);
     return parametros.toString();
-  }, [buscaAplicada, clienteId, vinculo, grauRisco, situacao, somenteIrregulares, numeroPagina]);
+  }, [buscaAplicada, clienteId, vinculo, grauRisco, situacao, somenteIrregulares, liberacao, numeroPagina, filtraAso]);
 
   const carregar = useCallback(async () => {
     setCarregando(true);
     try {
-      setPagina(await api.get<Paginado<ColaboradorApi>>(`/colaboradores?${consulta}`));
+      if (filtroAso === 'VALIDOS') {
+        // "Valido" = vigente ou a vencer: duas consultas sobre a mesma fatia.
+        const [vigentes, aVencer] = await Promise.all([
+          api.get<Paginado<ColaboradorApi>>(`/colaboradores?${consulta}&situacaoAso=VIGENTE`),
+          api.get<Paginado<ColaboradorApi>>(`/colaboradores?${consulta}&situacaoAso=A_VENCER`),
+        ]);
+        const itens = [...vigentes.itens, ...aVencer.itens].sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+        setPagina({ ...vigentes, itens, total: itens.length });
+      } else {
+        setPagina(
+          await api.get<Paginado<ColaboradorApi>>(
+            `/colaboradores?${consulta}${filtroAso ? `&situacaoAso=${filtroAso}` : ''}`,
+          ),
+        );
+      }
     } catch (erro) {
       mostrar(erro instanceof Error ? erro.message : 'Falha ao carregar os colaboradores.', 'erro');
     } finally {
       setCarregando(false);
     }
-  }, [consulta, mostrar]);
+  }, [consulta, filtroAso, mostrar]);
 
   useEffect(() => {
     void carregar();
@@ -107,6 +168,23 @@ export function ColaboradoresPage() {
     }
   }
 
+  async function baixarLista() {
+    setBaixando(true);
+    try {
+      const parametros = new URLSearchParams();
+      if (clienteId) parametros.set('clienteId', clienteId);
+      if (situacao) parametros.set('situacao', situacao);
+      await baixarArquivo(`/colaboradores/lista.xlsx?${parametros.toString()}`, `funcionarios-${new Date().toISOString().slice(0, 10)}.xlsx`);
+    } catch (erro) {
+      mostrar(erro instanceof ErroApi ? erro.mensagemAmigavel() : 'Falha ao gerar a lista.', 'erro');
+    } finally {
+      setBaixando(false);
+    }
+  }
+
+  const sufixoCliente = clienteId ? `&clienteId=${clienteId}` : '';
+  const vencendo = (asosAVencer ?? []).filter((item) => !item.vencido);
+  const jaVencidos = (asosAVencer ?? []).filter((item) => item.vencido);
   const itens = pagina?.itens ?? [];
   const impedidos = itens.filter((item) => item.impedido).length;
 
@@ -125,7 +203,16 @@ export function ColaboradoresPage() {
               + Novo colaborador
             </button>
           ) : null}
-          <Link className="btn btn-outline" to="/conformidade">
+          <button type="button" className="btn btn-outline" disabled={baixando} onClick={() => void baixarLista()}>
+            <Icone nome="documento" /> {baixando ? 'Gerando...' : 'Baixar lista (Excel)'}
+          </button>
+          <Link className="btn btn-outline" to={`/relatorios/aso${clienteId ? `?clienteId=${clienteId}` : ''}`}>
+            <Icone nome="saude" /> Relatório de ASO
+          </Link>
+          <Link className="btn btn-outline" to="/liberacao-equipe">
+            <Icone nome="pessoas" /> Liberação de equipe
+          </Link>
+          <Link className="btn btn-ghost" to="/conformidade">
             Painel de conformidade
           </Link>
           {impedidos > 0 ? (
@@ -134,6 +221,49 @@ export function ColaboradoresPage() {
             </span>
           ) : null}
         </div>
+
+        {vencendo.length > 0 || jaVencidos.length > 0 ? (
+          <div className="hint alerta" style={{ marginBottom: 10 }}>
+            <Icone nome="relogio" />{' '}
+            {vencendo.length > 0 ? (
+              <>
+                <b>
+                  {vencendo.length} ASO{vencendo.length === 1 ? '' : 's'} vence{vencendo.length === 1 ? '' : 'm'} nos próximos{' '}
+                  {DIAS_ALERTA_ASO} dias
+                </b>{' '}
+                — <Link to={`/relatorios/aso?situacao=A_VENCER${sufixoCliente}`}>ver no relatório</Link>.{' '}
+              </>
+            ) : null}
+            {jaVencidos.length > 0 ? (
+              <>
+                <b>
+                  {jaVencidos.length} já vencido{jaVencidos.length === 1 ? '' : 's'}
+                </b>{' '}
+                — <Link to={`/relatorios/aso?situacao=VENCIDO${sufixoCliente}`}>ver vencidos e sem ASO</Link>.
+              </>
+            ) : null}
+          </div>
+        ) : null}
+
+        {pendencias && pendencias.comPendencia > 0 ? (
+          <details className="ajuda-expansivel">
+            <summary>
+              <Icone nome="alerta" /> {pendencias.comPendencia} de {pendencias.avaliados} colaborador(es) ativo(s) com
+              pendência de documentação (ficha de registro, contrato, OS, ficha de EPI, ASO...)
+            </summary>
+            <ul>
+              {pendencias.itens.slice(0, 50).map((item) => (
+                <li key={item.colaboradorId}>
+                  <Link to={`/colaboradores/${item.colaboradorId}`}>{item.nome}</Link>
+                  <span className="hint"> — {item.pendencias.join('; ')}</span>
+                </li>
+              ))}
+            </ul>
+            {pendencias.itens.length > 50 ? (
+              <p className="hint">Mostrando 50 de {pendencias.itens.length}. Filtre por cliente para ver os demais.</p>
+            ) : null}
+          </details>
+        ) : null}
 
         <div className="filtros">
           <Campo label="Buscar" htmlFor="busca">
@@ -220,6 +350,39 @@ export function ColaboradoresPage() {
               ))}
             </select>
           </Campo>
+
+          <Campo label="ASO" htmlFor="filtro-aso">
+            <select
+              id="filtro-aso"
+              value={filtroAso}
+              onChange={(evento) => {
+                setFiltroAso(evento.target.value as FiltroAso);
+                setNumeroPagina(1);
+              }}
+            >
+              {OPCOES_FILTRO_ASO.map((opcao) => (
+                <option key={opcao.valor} value={opcao.valor}>
+                  {opcao.rotulo}
+                </option>
+              ))}
+            </select>
+          </Campo>
+
+          <Campo label="Liberação" htmlFor="filtro-liberacao">
+            <select
+              id="filtro-liberacao"
+              className="estreito"
+              value={liberacao}
+              onChange={(evento) => {
+                setLiberacao(evento.target.value as FiltroLiberacao);
+                setNumeroPagina(1);
+              }}
+            >
+              <option value="">Todos</option>
+              <option value="true">Bloqueados</option>
+              <option value="false">Liberados</option>
+            </select>
+          </Campo>
         </div>
 
         <div className="check-linha">
@@ -259,6 +422,8 @@ export function ColaboradoresPage() {
                   <tr>
                     <th>Colaborador</th>
                     <th>Função</th>
+                    <th>Telefone</th>
+                    <th>E-mail</th>
                     <th>Vínculo</th>
                     <th>Risco</th>
                     <th>ASO</th>
@@ -281,6 +446,23 @@ export function ColaboradoresPage() {
                       <td>
                         {colaborador.funcao}
                         <div className="hint">{colaborador.cliente?.nomeFantasia ?? '—'}</div>
+                        {colaborador.liderNome ? <div className="hint">Liderança: {colaborador.liderNome}</div> : null}
+                      </td>
+                      <td>
+                        {colaborador.telefone ? (
+                          <a href={`tel:+55${colaborador.telefone.replace(/\D/g, '')}`} style={{ whiteSpace: 'nowrap' }}>
+                            {MASCARAS.telefone(colaborador.telefone)}
+                          </a>
+                        ) : (
+                          <span className="hint">—</span>
+                        )}
+                      </td>
+                      <td>
+                        {colaborador.email ? (
+                          <a href={`mailto:${colaborador.email}`}>{colaborador.email}</a>
+                        ) : (
+                          <span className="hint">—</span>
+                        )}
                       </td>
                       <td>
                         {colaborador.rotulos?.vinculo ?? ROTULO_VINCULO_COLABORADOR[colaborador.vinculo]}
@@ -305,6 +487,16 @@ export function ColaboradoresPage() {
                         <span className={`pill ${PILL_SITUACAO_COLABORADOR[colaborador.situacao]}`}>
                           {ROTULO_SITUACAO_COLABORADOR[colaborador.situacao]}
                         </span>
+                        {colaborador.bloqueado ? (
+                          <div style={{ marginTop: 4 }}>
+                            <span
+                              className="pill bad"
+                              title={colaborador.motivoBloqueio ? `Motivo: ${colaborador.motivoBloqueio}` : 'Bloqueado'}
+                            >
+                              <Icone nome="bloqueado" /> Bloqueado
+                            </span>
+                          </div>
+                        ) : null}
                       </td>
                       <td>
                         <div className="acoes-linha">
@@ -313,6 +505,9 @@ export function ColaboradoresPage() {
                           </Link>
                           <Link className="btn btn-ghost btn-sm" to={`/colaboradores/${colaborador.id}/ppp`}>
                             PPP
+                          </Link>
+                          <Link className="btn btn-ghost btn-sm" to={`/colaboradores/${colaborador.id}/carteirinha`}>
+                            Carteirinha
                           </Link>
                           {podeEscrever ? (
                             <button type="button" className="btn btn-ghost btn-sm" onClick={() => void excluir(colaborador)}>
@@ -326,6 +521,13 @@ export function ColaboradoresPage() {
                 </tbody>
               </table>
             </div>
+
+            {filtraAso ? (
+              <p className="hint">
+                Filtro de ASO aplicado em blocos de {POR_PAGINA_FILTRO_ASO} cadastros
+                {pagina && pagina.totalPaginas > 1 ? ' — avance as páginas para ver os demais' : ''}.
+              </p>
+            ) : null}
 
             {pagina && pagina.totalPaginas > 1 ? (
               <div className="paginacao">

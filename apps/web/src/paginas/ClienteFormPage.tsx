@@ -5,6 +5,8 @@ import { useForm, type Path, type Resolver } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { clienteCreateSchema, type ClienteFormValues } from '@safetyguard/shared';
 import { Campo } from '../componentes/Campo';
+import { ContatosCliente, QrCodeCliente } from '../componentes/ContatosCliente';
+import { useSessao } from '../lib/sessao';
 import { useToast } from '../componentes/Toast';
 import { ErroApi, api, urlAbsoluta } from '../lib/api';
 import { MASCARAS, type NomeMascara } from '../lib/mascaras';
@@ -67,7 +69,8 @@ export function ClienteFormPage() {
   const [cliente, setCliente] = useState<ClienteApi | null>(null);
   const [referencias, setReferencias] = useState<Referencias>(REFERENCIAS_VAZIAS);
   const [centros, setCentros] = useState<OpcaoCentro[]>([]);
-  const [aba, setAba] = useState<'cadastro' | 'historico'>('cadastro');
+  const [aba, setAba] = useState<'cadastro' | 'contatos' | 'qr' | 'historico'>('cadastro');
+  const { pode } = useSessao();
   const [auditoria, setAuditoria] = useState<RegistroAuditoria[]>([]);
   const [enviandoLogo, setEnviandoLogo] = useState(false);
   const inputLogo = useRef<HTMLInputElement>(null);
@@ -262,6 +265,12 @@ export function ClienteFormPage() {
           <button type="button" role="tab" className={aba === 'cadastro' ? 'on' : ''} onClick={() => setAba('cadastro')}>
             Cadastro
           </button>
+          <button type="button" role="tab" className={aba === 'contatos' ? 'on' : ''} onClick={() => setAba('contatos')}>
+            Responsáveis e contatos
+          </button>
+          <button type="button" role="tab" className={aba === 'qr' ? 'on' : ''} onClick={() => setAba('qr')}>
+            QR Code único
+          </button>
           <button
             type="button"
             role="tab"
@@ -273,7 +282,10 @@ export function ClienteFormPage() {
         </div>
       ) : null}
 
-      {aba === 'historico' ? (
+      {aba === 'contatos' && id ? <ContatosCliente clienteId={id} podeEscrever={pode('cadastros:escrever')} /> : null}
+      {aba === 'qr' && id ? <QrCodeCliente clienteId={id} nome={valores.nomeFantasia} /> : null}
+
+      {aba === 'contatos' || aba === 'qr' ? null : aba === 'historico' ? (
         <div className="painel">
           <h3><Icone nome="documento" /> Trilha de auditoria</h3>
           <p className="desc">Quem alterou o quê e quando, desde a criação do cadastro.</p>

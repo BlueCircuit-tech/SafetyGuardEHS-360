@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import {
   NORMAS_SUGERIDAS,
   ROTULO_SITUACAO_CAPACITACAO,
@@ -106,9 +107,19 @@ export function TreinamentosPage() {
   const [busca, setBusca] = useState('');
 
   const [novoTreinamento, setNovoTreinamento] = useState(TREINAMENTO_VAZIO);
-  const [novoRequisito, setNovoRequisito] = useState({ funcao: '', treinamentoId: '' });
+  const [novoRequisito, setNovoRequisito] = useState<{ funcao: string; treinamentoIds: string[] }>({
+    funcao: '',
+    treinamentoIds: [],
+  });
   const [novaRealizacao, setNovaRealizacao] = useState(REALIZACAO_VAZIA);
   const [salvando, setSalvando] = useState(false);
+  /** Última realização registrada — permite anexar o certificado logo em seguida. */
+  const [ultimaRealizacao, setUltimaRealizacao] = useState<
+    { id: string; colaboradorId: string; descricao: string; certificadoEnviado: boolean } | null
+  >(null);
+  const [enviandoCertificado, setEnviandoCertificado] = useState(false);
+  /** Link da plataforma de treinamentos (Configurações > Empresa). `undefined` = ainda carregando. */
+  const [urlPlataforma, setUrlPlataforma] = useState<string | null | undefined>(undefined);
 
   const carregarMatriz = useCallback(async () => {
     setCarregando(true);
@@ -140,6 +151,10 @@ export function TreinamentosPage() {
     void api.get<OpcaoCliente[]>('/clientes/opcoes').then(setClientes).catch(() => setClientes([]));
     void api.get<OpcaoColaborador[]>('/colaboradores/opcoes').then(setColaboradores).catch(() => setColaboradores([]));
     void carregarApoio();
+    void api
+      .get<{ urlPlataformaTreinamentos?: string | null }>('/empresa')
+      .then((empresa) => setUrlPlataforma(empresa.urlPlataformaTreinamentos?.trim() || null))
+      .catch(() => setUrlPlataforma(null));
   }, [carregarApoio]);
 
   useEffect(() => {
@@ -166,12 +181,29 @@ export function TreinamentosPage() {
     }
   }
 
+  function alternarTreinamentoDoRequisito(treinamentoId: string) {
+    setNovoRequisito((atual) => ({
+      ...atual,
+      treinamentoIds: atual.treinamentoIds.includes(treinamentoId)
+        ? atual.treinamentoIds.filter((idAtual) => idAtual !== treinamentoId)
+        : [...atual.treinamentoIds, treinamentoId],
+    }));
+  }
+
   async function criarRequisito() {
     setSalvando(true);
     try {
-      await api.post('/capacitacao/requisitos', novoRequisito);
-      mostrar('Requisito adicionado a matriz.', 'sucesso');
-      setNovoRequisito({ funcao: '', treinamentoId: '' });
+      const resposta = await api.post<{ criados: number; ignorados: number }>('/capacitacao/requisitos/lote', {
+        funcao: novoRequisito.funcao.trim(),
+        treinamentoIds: novoRequisito.treinamentoIds,
+      });
+      mostrar(
+        `${resposta.criados} treinamento(s) adicionado(s) à função ${novoRequisito.funcao.trim()}` +
+          (resposta.ignorados > 0 ? ` · ${resposta.ignorados} já era(m) exigido(s)` : '') +
+          '.',
+        'sucesso',
+      );
+      setNovoRequisito({ funcao: '', treinamentoIds: [] });
       void carregarApoio();
       void carregarMatriz();
     } catch (erro) {
@@ -195,12 +227,20 @@ export function TreinamentosPage() {
   async function registrarRealizacao() {
     setSalvando(true);
     try {
-      await api.post('/treinamentos-realizados', {
+      const criada = await api.post<{ id: string }>('/treinamentos-realizados', {
         ...novaRealizacao,
         validade: novaRealizacao.validade || undefined,
         instrutor: novaRealizacao.instrutor || undefined,
       });
-      mostrar('Treinamento registrado.', 'sucesso');
+      const colaborador = colaboradores.find((item) => item.id === novaRealizacao.colaboradorId);
+      const treinamento = catalogo.find((item) => item.id === novaRealizacao.treinamentoId);
+      setUltimaRealizacao({
+        id: criada.id,
+        colaboradorId: novaRealizacao.colaboradorId,
+        descricao: `${treinamento?.nome ?? 'Treinamento'} — ${colaborador?.nome ?? 'colaborador'}`,
+        certificadoEnviado: false,
+      });
+      mostrar('Treinamento registrado. Anexe o certificado abaixo, se já o tiver.', 'sucesso');
       setNovaRealizacao(REALIZACAO_VAZIA);
       void carregarMatriz();
     } catch (erro) {
@@ -209,6 +249,27 @@ export function TreinamentosPage() {
       setSalvando(false);
     }
   }
+
+  async function anexarCertificado(arquivo: File) {
+    if (!ultimaRealizacao) return;
+    setEnviandoCertificado(true);
+    try {
+      await api.upload(`/treinamentos-realizados/${ultimaRealizacao.id}/certificado`, arquivo);
+      mostrar('Certificado anexado.', 'sucesso');
+      setUltimaRealizacao({ ...ultimaRealizacao, certificadoEnviado: true });
+    } catch (erro) {
+      mostrar(erro instanceof ErroApi ? erro.mensagemAmigavel() : 'Falha ao anexar o certificado.', 'erro');
+    } finally {
+      setEnviandoCertificado(false);
+    }
+  }
+
+  /** Treinamentos que a função digitada já exige — evita marcar repetido. */
+  const jaExigidos = new Set(
+    requisitos
+      .filter((requisito) => requisito.funcao.trim().toLowerCase() === novoRequisito.funcao.trim().toLowerCase())
+      .map((requisito) => requisito.treinamento.id),
+  );
 
   const resumo = matriz?.resumo;
 
@@ -220,6 +281,19 @@ export function TreinamentosPage() {
           Quais funções exigem quais treinamentos, quem está em dia e o que vence a seguir. O percentual de requisitos
           em dia é a nota do pilar <b>Treinamentos</b> no ICSG e no Índice Global SSMA.
         </p>
+
+        <div className="barra-acoes">
+          {urlPlataforma ? (
+            <a className="btn btn-outline" href={urlPlataforma} target="_blank" rel="noreferrer">
+              <Icone nome="link" /> Plataforma de treinamentos
+            </a>
+          ) : urlPlataforma === null ? (
+            <span className="hint">
+              <Icone nome="link" /> Plataforma de treinamentos: cadastre o link em{' '}
+              <Link to="/empresa">Configurações &gt; Empresa</Link>.
+            </span>
+          ) : null}
+        </div>
 
         {resumo ? (
           <div className="stat-grid">
@@ -333,10 +407,13 @@ export function TreinamentosPage() {
                   {matriz.linhas.map((linha) => (
                     <tr key={`${linha.colaboradorId}-${linha.treinamentoId}`}>
                       <td>
-                        <b>{linha.colaborador}</b>
+                        <Link to={`/colaboradores/${linha.colaboradorId}`}>
+                          <b>{linha.colaborador}</b>
+                        </Link>
                         <div className="hint">
                           {linha.cliente}
-                          {linha.terceiro ? ` · ${linha.terceiro}` : ''}
+                          {linha.terceiro ? ` · ${linha.terceiro}` : ''} ·{' '}
+                          <Link to={`/colaboradores/${linha.colaboradorId}/carteirinha`}>carteirinha</Link>
                         </div>
                       </td>
                       <td>{linha.funcao}</td>
@@ -422,7 +499,10 @@ export function TreinamentosPage() {
 
               <div className="painel">
                 <h3>Novo requisito da matriz</h3>
-                <p className="desc">A função (o mesmo texto do cadastro do colaborador) passa a exigir o treinamento.</p>
+                <p className="desc">
+                  A função (o mesmo texto do cadastro do colaborador) passa a exigir os treinamentos marcados — marque
+                  quantos forem necessários.
+                </p>
                 <Campo label="Função" htmlFor="nr-funcao" obrigatorio>
                   <input
                     id="nr-funcao"
@@ -436,30 +516,58 @@ export function TreinamentosPage() {
                     ))}
                   </datalist>
                 </Campo>
-                <Campo label="Treinamento exigido" htmlFor="nr-treinamento" obrigatorio>
-                  <select
-                    id="nr-treinamento"
-                    value={novoRequisito.treinamentoId}
-                    onChange={(evento) => setNovoRequisito({ ...novoRequisito, treinamentoId: evento.target.value })}
+                <Campo
+                  label={`Treinamentos exigidos (${novoRequisito.treinamentoIds.length} marcado${novoRequisito.treinamentoIds.length === 1 ? '' : 's'})`}
+                  obrigatorio
+                  ajuda="Os que a função já exige aparecem marcados como “já exigido”."
+                >
+                  <div
+                    style={{
+                      maxHeight: 220,
+                      overflowY: 'auto',
+                      border: '1px solid var(--border)',
+                      borderRadius: 8,
+                      padding: '6px 10px',
+                    }}
                   >
-                    <option value="">Selecione...</option>
-                    {catalogo
-                      .filter((treinamento) => treinamento.ativo)
-                      .map((treinamento) => (
-                        <option key={treinamento.id} value={treinamento.id}>
-                          {treinamento.nome}
-                        </option>
-                      ))}
-                  </select>
+                    {catalogo.filter((treinamento) => treinamento.ativo).length === 0 ? (
+                      <span className="hint">Cadastre treinamentos no catálogo primeiro.</span>
+                    ) : (
+                      catalogo
+                        .filter((treinamento) => treinamento.ativo)
+                        .map((treinamento) => {
+                          const exigido = jaExigidos.has(treinamento.id);
+                          return (
+                            <label key={treinamento.id} className="check-linha" style={{ display: 'flex', gap: 8, padding: '3px 0' }}>
+                              <input
+                                type="checkbox"
+                                disabled={exigido}
+                                checked={exigido || novoRequisito.treinamentoIds.includes(treinamento.id)}
+                                onChange={() => alternarTreinamentoDoRequisito(treinamento.id)}
+                              />
+                              <span>
+                                {treinamento.nome}
+                                {treinamento.norma ? <span className="hint"> · {treinamento.norma}</span> : null}
+                                {exigido ? <span className="pill gray"> já exigido</span> : null}
+                              </span>
+                            </label>
+                          );
+                        })
+                    )}
+                  </div>
                 </Campo>
                 <button
                   type="button"
                   className="btn btn-primary"
-                  disabled={salvando || !novoRequisito.funcao || !novoRequisito.treinamentoId}
+                  disabled={salvando || !novoRequisito.funcao.trim() || novoRequisito.treinamentoIds.length === 0}
                   onClick={() => void criarRequisito()}
                 >
-                  Adicionar à matriz
+                  Adicionar {novoRequisito.treinamentoIds.length > 1 ? `${novoRequisito.treinamentoIds.length} treinamentos` : ''} à
+                  matriz
                 </button>
+                {!novoRequisito.funcao.trim() || novoRequisito.treinamentoIds.length === 0 ? (
+                  <p className="hint">Informe a função e marque ao menos um treinamento.</p>
+                ) : null}
               </div>
             </div>
           ) : null}
@@ -617,10 +725,41 @@ export function TreinamentosPage() {
               {salvando ? 'Registrando...' : 'Registrar'}
             </button>
             <span className="hint">
-              O certificado pode ser anexado depois, no histórico do colaborador (
-              <span className="mono">POST /treinamentos-realizados/:id/certificado</span>).
+              Depois de registrar, você pode anexar o certificado aqui mesmo — ou depois, na aba Documentos do cadastro do
+              colaborador.
             </span>
           </div>
+
+          {ultimaRealizacao ? (
+            <div className="campo-bloco" style={{ marginTop: 14 }}>
+              <b>Último registro:</b> {ultimaRealizacao.descricao}
+              <div className="barra-acoes" style={{ marginTop: 8 }}>
+                {ultimaRealizacao.certificadoEnviado ? (
+                  <span className="pill ok">
+                    <Icone nome="ok" /> Certificado anexado
+                  </span>
+                ) : (
+                  <label className="btn btn-outline btn-sm">
+                    <Icone nome="anexo" /> {enviandoCertificado ? 'Enviando...' : 'Anexar certificado (PDF ou imagem)'}
+                    <input
+                      type="file"
+                      hidden
+                      accept="application/pdf,image/*"
+                      disabled={enviandoCertificado}
+                      onChange={(evento) => {
+                        const arquivo = evento.target.files?.[0];
+                        evento.target.value = '';
+                        if (arquivo) void anexarCertificado(arquivo);
+                      }}
+                    />
+                  </label>
+                )}
+                <Link className="btn btn-ghost btn-sm" to={`/colaboradores/${ultimaRealizacao.colaboradorId}/carteirinha`}>
+                  Ver carteirinha
+                </Link>
+              </div>
+            </div>
+          ) : null}
         </div>
       ) : null}
     </>

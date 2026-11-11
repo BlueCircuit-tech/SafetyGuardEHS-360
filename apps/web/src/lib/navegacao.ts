@@ -170,7 +170,11 @@ export const TEMAS: TemaNav[] = [
       {
         titulo: 'Colaboradores',
         icone: 'pessoas',
-        itens: [{ titulo: 'Colaboradores', descricao: 'Cadastro, ASO, exames e PPP', rota: '/colaboradores', permissao: 'saude:ler' }],
+        itens: [
+          { titulo: 'Colaboradores', descricao: 'Cadastro, ASO, exames e PPP', rota: '/colaboradores', permissao: 'saude:ler' },
+          { titulo: 'Relatório de ASO', descricao: 'Admissional, periódico, demissional; vencidos e válidos', rota: '/relatorios/aso', permissao: 'saude:ler' },
+          { titulo: 'Liberação de equipe', descricao: 'Quem pode trabalhar: documentos, ASO e bloqueios', rota: '/liberacao-equipe', permissao: 'saude:ler' },
+        ],
       },
       {
         titulo: 'Afastamentos',
@@ -414,6 +418,7 @@ export const PERFIS_USO: Array<{ titulo: string; descricao: string }> = [
 /** Relatórios e documentos gerados pelo sistema, reunidos no hub Relatórios. */
 export const RELATORIOS: LinkNav[] = [
   { titulo: 'Relatório mensal (Excel)', descricao: 'O que foi realizado e as pendências do mês, por cliente', rota: '/relatorios/mensal', permissao: 'indicadores:ler' },
+  { titulo: 'Relatório de ASO', descricao: 'Lista por colaborador com filtro vencido/válido e Excel', rota: '/relatorios/aso', permissao: 'saude:ler' },
   { titulo: 'Relatório fotográfico', descricao: 'Fotos das observações e evidências dos planos, por período', rota: '/relatorios/fotografico', permissao: 'indicadores:ler' },
   { titulo: 'Modelos de relatório', descricao: 'Textos-base da consultoria, com geração assistida', rota: '/relatorios/modelos', permissao: 'indicadores:ler' },
   { titulo: 'Relatório Diário de SSMA', descricao: 'Fechamento do dia com acidentes, desvios e evidências', rota: '/acidentes/relatorio-diario', permissao: 'planos:ler' },

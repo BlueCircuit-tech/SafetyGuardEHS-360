@@ -173,6 +173,9 @@ Ficam no `.env` da raiz (a API e o Vite leem do mesmo arquivo). Veja
 | `JWT_EXPIRA_EM` | `12h` | Validade do token |
 | `ADMIN_EMAIL` / `ADMIN_SENHA` | `admin@safetyguard.com.br` / `SafetyGuard2026` | Usuário criado pelo seed |
 | `VITE_API_URL` | `http://localhost:3333` | URL da API usada pelo front |
+| `ANTHROPIC_API_KEY` | — | Liga o "Gerar com IA" (roteiro de DDS, modelos de relatório). Sem ela, usa um roteiro-modelo local |
+| `SMTP_*` / `ALERTA_EMAIL_COPIA` | — | Envio real de e-mail (alertas, cobrança da chefia, resumo diário). Sem SMTP, cai no Ethereal |
+| `CRON_SECRET` | — | Liga o agendador diário (escalonamento, cobrança da chefia e resumo de pendências) |
 
 A API falha ao iniciar se alguma variável obrigatória estiver ausente ou inválida.
 
@@ -385,6 +388,33 @@ plano: [`docs/indicadores-ssma.md`](docs/indicadores-ssma.md).
 | 17 | SafetyGuard Intelligence (análises automáticas) | ✅ |
 | 18 | Acidentes, CAT (S-2210) e Investigação | ✅ |
 | 19 | Inventário de Riscos (GRO/PGR) e Central de Risco | ✅ |
+| 24 | Melhorias do levantamento da operação (ver abaixo) | ✅ |
+
+---
+
+## Etapa 24 — melhorias do levantamento da operação
+
+Aplicação do documento "Melhoria Plataforma". Resumo do que entrou:
+
+- **Correções**: observação de origem que quebrava ao abrir; empresa contratada e colaborador que não carregavam nos formulários; acidente e DDS que não diziam qual campo corrigir; foto que só podia ser anexada depois de salvar; upload sem armazenamento persistente na Vercel; plano de ação nascendo com a data do relato.
+- **Navegação**: botão Voltar e atalho para a página inicial em todas as telas.
+- **Administração SST**: cartão de ponto (horas × valor hora × cliente), fornecedores, planilha financeira com Excel, lista de funcionários com telefone/e-mail em Excel, relatório mensal (realizado + pendências) em Excel, relatório fotográfico (antes/depois).
+- **Planos de ação**: foto inicial e foto da resolução; cobrança por e-mail da chefia quando a pendência passa 10 (Alta), 20 (Média) ou 30 dias (Baixa) do prazo.
+- **Clientes**: responsáveis e contatos por nível hierárquico (os papéis da matriz viram e-mails reais) e QR Code único por cliente.
+- **DDS**: roteiro gerado por IA, formulário imprimível com lista de presença, filtros e painel.
+- **Acidentes**: diagrama do corpo humano, lesão permanente e dias debitados (NBR 14280: morte 6000, perda de membro 3000, visão de um olho 1800).
+- **APR/AST**: modelo AST (COMAU), tipos de serviço, local da atividade, logos, impressão em paisagem, verificação do carimbo, exclusão.
+- **Checklists**: 14 modelos padrão de ferramentas e equipamentos, edição e duplicação.
+- **Consequências**: aviso aos níveis hierárquicos e relatório mensal/anual por empresa.
+- **ASO / colaboradores**: alerta de 35 dias, relatório (admissional, periódico, demissional, afastamentos) com filtro vencido/válido, foto, bloqueio com motivo, carteirinha com QR Code verificável, pasta de documentos legais e liberação de equipe.
+- **Absenteísmo**: função, setor, liderança, providências de retorno, painel por função/ano.
+- **EPI**: anexos (laudo, CA, NF), entradas com nota fiscal e custo, alerta de compra a 10% do estoque, consumo em 3/6/9/12 meses, troca vencida, ficha de EPI e assinatura na tela.
+- **Ordem de serviço**: texto padrão, edição antes da ciência, assinatura na tela, cópia assinada em PDF, verificação.
+- **Treinamentos**: vários treinamentos por função de uma vez e link da plataforma de treinamentos.
+- **Novos módulos**: CIPA (NR-5), Ergonomia (NR-17), Produtos químicos (GHS/FDS), Brigada e extintores, Meio ambiente (aspectos e impactos, documentos ambientais, painel), Modelos de relatório com IA.
+- **Agendador diário**: escalonamento, cobrança da chefia e resumo de pendências por cliente.
+
+Dependem de material ou decisão da operação: modelos oficiais do Valmir (ficha de EPI, OS, carteirinha, PPP, pictogramas GHS), integração com o site SGI/ESG, biometria (facial/íris/digital), aplicativo de celular e "auto gestão" de consequências.
 
 ---
 

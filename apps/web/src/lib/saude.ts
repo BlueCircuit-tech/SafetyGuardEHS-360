@@ -98,6 +98,15 @@ export interface ColaboradorApi {
   telefone: string | null;
   situacao: SituacaoColaborador;
   observacoes: string | null;
+  /** Liderança direta (supervisor/encarregado). */
+  liderNome?: string | null;
+  /** Foto 3x4 — sobe por `POST /colaboradores/:id/foto`. */
+  fotoUrl?: string | null;
+  /** Bloqueio manual de acesso ao trabalho — `POST /colaboradores/:id/bloqueio`. */
+  bloqueado?: boolean;
+  motivoBloqueio?: string | null;
+  bloqueadoEm?: string | null;
+  tokenCarteirinha?: string | null;
   cliente?: { id: string; nomeFantasia: string };
   terceiro?: { id: string; nomeFantasia: string } | null;
   area?: { id: string; nome: string; codigo: string } | null;
@@ -112,6 +121,157 @@ export interface ColaboradorDetalhe extends ColaboradorApi {
   asos: AsoResumido[];
   documentos: { id: string; tipo: TipoDocumento; titulo: string; validade: string | null; situacao: SituacaoDocumento }[];
 }
+
+/* -------------------------------------------------------------------------- */
+/* Etapa 24 — carteirinha, pasta de documentos e relatório de ASO               */
+/* -------------------------------------------------------------------------- */
+
+/** Situação de vencimento devolvida pela API (`situacaoDaValidade`). */
+export type SituacaoValidade = SituacaoVencimento | 'SEM_ASO';
+
+export interface CarteirinhaApi {
+  geradoEm?: string;
+  consultoria: { nomeFantasia: string; logoUrl: string | null } | null;
+  empregador: string;
+  cliente: { nomeFantasia: string; logoUrl: string | null };
+  colaborador: {
+    id: string;
+    nome: string;
+    cpfParcial: string;
+    matricula: string | null;
+    funcao: string;
+    setor: string | null;
+    fotoUrl: string | null;
+    /** Rótulo da situação (Ativo, Afastado, Desligado). */
+    situacao: string;
+    bloqueado: boolean;
+    motivoBloqueio: string | null;
+  };
+  aso: { validade: string | null; resultado: string; situacao: SituacaoValidade } | null;
+  treinamentos: {
+    nome: string;
+    norma: string | null;
+    dataRealizacao: string;
+    validade: string | null;
+    situacao: SituacaoVencimento;
+  }[];
+  /** Exigidos pela matriz de capacitação para a função e nunca realizados. */
+  treinamentosFaltantes?: { nome: string; norma: string | null }[];
+  liberado: boolean;
+  /** Só na rota autenticada. */
+  token?: string;
+  urlVerificacao?: string;
+  urlQrCode?: string;
+}
+
+export type SituacaoItemPasta = 'OK' | 'A_VENCER' | 'VENCIDO' | 'SEM_ARQUIVO' | 'AUSENTE';
+
+export const PILL_ITEM_PASTA: Record<SituacaoItemPasta, string> = {
+  OK: 'ok',
+  A_VENCER: 'warn',
+  VENCIDO: 'bad',
+  SEM_ARQUIVO: 'orange',
+  AUSENTE: 'bad',
+};
+
+export const ROTULO_ITEM_PASTA: Record<SituacaoItemPasta, string> = {
+  OK: 'Em dia',
+  A_VENCER: 'A vencer',
+  VENCIDO: 'Vencido',
+  SEM_ARQUIVO: 'Sem arquivo',
+  AUSENTE: 'Não cadastrado',
+};
+
+export interface DocumentacaoColaboradorApi {
+  colaboradorId: string;
+  nome: string;
+  clienteId: string;
+  itens: {
+    tipo: TipoDocumento;
+    rotulo: string;
+    descricao: string | null;
+    documento?: {
+      id: string;
+      tipo: TipoDocumento;
+      titulo: string;
+      validade: string | null;
+      arquivoUrl: string | null;
+      dataEmissao: string;
+    } | null;
+    situacao: SituacaoItemPasta;
+  }[];
+  aso: { id: string; validade: string | null; arquivoUrl: string | null; situacao: SituacaoValidade } | null;
+  ordemServico: { id: string; codigo: string; situacao: string; arquivoAssinadoUrl: string | null } | null;
+  certificados: {
+    id: string;
+    treinamento: string;
+    validade: string | null;
+    certificadoUrl: string | null;
+    situacao: SituacaoVencimento;
+  }[];
+  pendencias: string[];
+  completo: boolean;
+}
+
+export interface PendenciasDocumentacaoApi {
+  avaliados: number;
+  comPendencia: number;
+  itens: { colaboradorId: string; nome: string; clienteId: string; pendencias: string[] }[];
+}
+
+export interface AsoAVencerApi {
+  asoId: string;
+  colaboradorId: string;
+  nome: string;
+  funcao: string;
+  cliente: string;
+  tipo: string;
+  validade: string | null;
+  diasParaVencer: number | null;
+  vencido: boolean;
+}
+
+export interface LinhaRelatorioAso {
+  id: string;
+  nome: string;
+  cpf: string;
+  matricula: string | null;
+  funcao: string;
+  setor: string | null;
+  cliente: string;
+  terceiro: string | null;
+  vinculo: string;
+  situacaoColaborador: string;
+  admissao: string | null;
+  admissional: string | null;
+  periodico: string | null;
+  retornoAoTrabalho: string | null;
+  mudancaDeRisco: string | null;
+  demissional: string | null;
+  ultimoExameTipo: string | null;
+  ultimoExame: string | null;
+  validade: string | null;
+  diasParaVencer: number | null;
+  resultado: string | null;
+  situacaoAso: SituacaoValidade;
+  rotuloSituacaoAso: string;
+  afastamentos: number;
+  ultimoAfastamento: string | null;
+  bloqueado: boolean;
+  telefone: string | null;
+  email: string | null;
+}
+
+export interface RelatorioAsoApi {
+  geradoEm: string;
+  diasAlerta: number;
+  total: number;
+  resumo: { vigentes: number; aVencer: number; vencidos: number; semAso: number };
+  itens: LinhaRelatorioAso[];
+}
+
+/** Dias de antecedência do alerta de vencimento do ASO (igual ao servidor). */
+export const DIAS_ALERTA_ASO = 35;
 
 export interface DocumentoApi {
   id: string;

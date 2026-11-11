@@ -2,19 +2,27 @@ import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   CATEGORIAS_ISHIKAWA,
+  DIAS_DEBITADOS,
   ISHIKAWA_VAZIO,
+  LESOES_PERMANENTES,
+  PARTES_CORPO,
   PERGUNTA_ISHIKAWA,
   ROTULO_INVESTIGACAO,
   ROTULO_ISHIKAWA,
+  ROTULO_LESAO_PERMANENTE,
+  ROTULO_PARTE_CORPO,
   ROTULO_TIPO_ACIDENTE,
   SITUACOES_INVESTIGACAO,
   TIPOS_ACIDENTE,
   totalCausasIshikawa,
   type Ishikawa,
+  type LesaoPermanente,
+  type ParteCorpo,
   type SituacaoInvestigacao,
   type TipoAcidente,
 } from '@safetyguard/shared';
 import { Campo } from '../componentes/Campo';
+import { DiagramaCorpo } from '../componentes/DiagramaCorpo';
 import { Icone } from '../componentes/Icone';
 import { ListaEditavel } from '../componentes/ListaEditavel';
 import { useToast } from '../componentes/Toast';
@@ -30,6 +38,9 @@ interface AcidenteApi {
   parteCorpoAtingida: string | null;
   comAfastamento: boolean;
   diasAfastamento: number;
+  lesaoPermanente?: LesaoPermanente | null;
+  diasDebitados?: number;
+  diasComputados?: number;
   catNumero: string | null;
   catEmitidaEm: string | null;
   catPendente: boolean;
@@ -43,7 +54,7 @@ interface AcidenteApi {
   area?: { id: string; nome: string } | null;
   colaborador?: { id: string; nome: string; funcao: string } | null;
   planoAcao?: { id: string; codigo: string; status: string } | null;
-  rotulos?: { tipo: string; investigacao: string };
+  rotulos?: { tipo: string; investigacao: string; lesaoPermanente?: string };
 }
 
 interface ResumoAcidentes {
@@ -52,6 +63,9 @@ interface ResumoAcidentes {
   diasPerdidos: number;
   investigacoesAbertas: number;
   catsPendentes: number;
+  diasDebitados?: number;
+  diasComputados?: number;
+  comLesaoPermanente?: number;
 }
 
 interface OpcaoCliente {
@@ -77,7 +91,11 @@ const NOVO_VAZIO = {
   data: '',
   tipo: 'TIPICO' as TipoAcidente,
   descricao: '',
-  parteCorpoAtingida: '',
+  /** Regioes marcadas no diagrama; viram rotulos separados por "; " em `parteCorpoAtingida`. */
+  partesCorpo: [] as ParteCorpo[],
+  /** Texto livre que nao corresponde a nenhuma regiao (registros antigos ou "outro"). */
+  parteCorpoOutro: '',
+  lesaoPermanente: 'NENHUMA' as LesaoPermanente,
   comAfastamento: false,
   diasAfastamento: '0',
   catNumero: '',
@@ -89,6 +107,43 @@ const NOVO_VAZIO = {
 };
 
 const FILTRO_VAZIO = { busca: '', de: '', ate: '', situacaoInvestigacao: '' };
+
+/** Minusculas e sem acento, para reconhecer "Tórax" e "Torax" como a mesma regiao. */
+function normalizar(texto: string): string {
+  return texto
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .trim()
+    .toLowerCase();
+}
+
+const PARTE_POR_ROTULO = new Map<string, ParteCorpo>(
+  PARTES_CORPO.flatMap((parte) => [
+    [normalizar(ROTULO_PARTE_CORPO[parte]), parte] as [string, ParteCorpo],
+    [normalizar(parte.replace(/_/g, ' ')), parte] as [string, ParteCorpo],
+  ]),
+);
+
+/** Regioes (na ordem do diagrama) + texto livre -> "Cabeca; Maos; outro". */
+function partesParaTexto(partes: ParteCorpo[], outro: string): string {
+  const rotulos = PARTES_CORPO.filter((parte) => partes.includes(parte)).map((parte) => ROTULO_PARTE_CORPO[parte]);
+  if (outro.trim()) rotulos.push(outro.trim());
+  return rotulos.join('; ');
+}
+
+/** O inverso: reconhece os rotulos; o que sobrar volta como texto livre. */
+function textoParaPartes(texto: string | null): { partes: ParteCorpo[]; outro: string } {
+  const partes: ParteCorpo[] = [];
+  const sobras: string[] = [];
+  for (const pedaco of (texto ?? '').split(/[;,]/)) {
+    const limpo = pedaco.trim();
+    if (!limpo) continue;
+    const parte = PARTE_POR_ROTULO.get(normalizar(limpo));
+    if (parte && !partes.includes(parte)) partes.push(parte);
+    else if (!parte) sobras.push(limpo);
+  }
+  return { partes, outro: sobras.join('; ') };
+}
 
 export function AcidentesPage() {
   const { mostrar } = useToast();
@@ -142,10 +197,13 @@ export function AcidentesPage() {
     try {
       // Ishikawa sem nenhuma causa e 5 Porques vazio vao como null — "nao
       // preenchido", nao "preenchido com nada".
+      const { partesCorpo, parteCorpoOutro, ...resto } = novo;
+      const parteCorpoAtingida = partesParaTexto(partesCorpo, parteCorpoOutro);
       const corpo = {
-        ...novo,
+        ...resto,
         colaboradorId: novo.colaboradorId || undefined,
-        parteCorpoAtingida: novo.parteCorpoAtingida || undefined,
+        // Na edicao, string vazia vira null no servidor e limpa o campo.
+        parteCorpoAtingida: parteCorpoAtingida || (editandoId ? '' : undefined),
         catNumero: novo.catNumero || undefined,
         investigador: novo.investigador || undefined,
         causaRaiz: novo.causaRaiz || undefined,
@@ -182,13 +240,16 @@ export function AcidentesPage() {
   function editar(acidente: AcidenteApi) {
     setErros({});
     setEditandoId(acidente.id);
+    const { partes, outro } = textoParaPartes(acidente.parteCorpoAtingida);
     setNovo({
       clienteId: acidente.cliente?.id ?? '',
       colaboradorId: acidente.colaborador?.id ?? '',
       data: acidente.data.slice(0, 10),
       tipo: acidente.tipo,
       descricao: acidente.descricao,
-      parteCorpoAtingida: acidente.parteCorpoAtingida ?? '',
+      partesCorpo: partes,
+      parteCorpoOutro: outro,
+      lesaoPermanente: acidente.lesaoPermanente ?? 'NENHUMA',
       comAfastamento: acidente.comAfastamento,
       diasAfastamento: String(acidente.diasAfastamento),
       catNumero: acidente.catNumero ?? '',
@@ -204,6 +265,19 @@ export function AcidentesPage() {
   function definirIshikawa(categoria: (typeof CATEGORIAS_ISHIKAWA)[number], causas: string[]) {
     setNovo({ ...novo, ishikawa: { ...novo.ishikawa, [categoria]: causas } });
   }
+
+  function alternarParte(parte: ParteCorpo) {
+    setNovo((atual) => ({
+      ...atual,
+      partesCorpo: atual.partesCorpo.includes(parte)
+        ? atual.partesCorpo.filter((p) => p !== parte)
+        : [...atual.partesCorpo, parte],
+    }));
+  }
+
+  const diasDebitadosNovo = DIAS_DEBITADOS[novo.lesaoPermanente] ?? 0;
+  const diasAfastamentoNovo = novo.comAfastamento ? Math.max(0, Number(novo.diasAfastamento) || 0) : 0;
+  const diasComputadosNovo = diasAfastamentoNovo + diasDebitadosNovo;
 
   return (
     <>
@@ -228,6 +302,21 @@ export function AcidentesPage() {
               <b>{resumo.diasPerdidos}</b>
               <span>dias perdidos</span>
             </div>
+            {resumo.diasDebitados !== undefined ? (
+              <div className="stat">
+                <b style={{ color: resumo.diasDebitados > 0 ? 'var(--red)' : undefined }}>{resumo.diasDebitados}</b>
+                <span>
+                  dias debitados
+                  {resumo.comLesaoPermanente ? ` (${resumo.comLesaoPermanente} lesão(ões) permanente(s))` : ''}
+                </span>
+              </div>
+            ) : null}
+            {resumo.diasComputados !== undefined ? (
+              <div className="stat">
+                <b>{resumo.diasComputados}</b>
+                <span>dias computados (perdidos + debitados)</span>
+              </div>
+            ) : null}
             <div className="stat">
               <b style={{ color: resumo.catsPendentes > 0 ? 'var(--red)' : undefined }}>{resumo.catsPendentes}</b>
               <span>CAT pendente(s)</span>
@@ -276,14 +365,71 @@ export function AcidentesPage() {
                 ))}
               </select>
             </Campo>
-            <Campo label="Parte do corpo" htmlFor="ac-parte">
-              <input id="ac-parte" value={novo.parteCorpoAtingida} onChange={(e) => setNovo({ ...novo, parteCorpoAtingida: e.target.value })} />
-            </Campo>
           </div>
 
           <Campo label="Descrição do acidente" htmlFor="ac-desc" obrigatorio erro={erros.descricao}>
             <textarea id="ac-desc" rows={2} value={novo.descricao} onChange={(e) => setNovo({ ...novo, descricao: e.target.value })} />
           </Campo>
+
+          <h4>Partes do corpo atingidas</h4>
+          <p className="desc">
+            Clique nas regiões do desenho (vista anterior e posterior) ou marque na lista. Lado direito e esquerdo contam
+            como a mesma região.
+          </p>
+          <div className="grid2" style={{ alignItems: 'start' }}>
+            <DiagramaCorpo selecionadas={novo.partesCorpo} aoAlternar={alternarParte} />
+            <div>
+              <Campo
+                label="Outra parte / detalhe"
+                htmlFor="ac-parte-outro"
+                ajuda="Texto livre para o que não está no desenho (ex.: dedo indicador direito). Registros antigos não reconhecidos aparecem aqui."
+                erro={erros.parteCorpoAtingida}
+              >
+                <input
+                  id="ac-parte-outro"
+                  value={novo.parteCorpoOutro}
+                  onChange={(e) => setNovo({ ...novo, parteCorpoOutro: e.target.value })}
+                />
+              </Campo>
+              <div className="hint" style={{ marginTop: 8 }}>
+                <b>Será gravado:</b> {partesParaTexto(novo.partesCorpo, novo.parteCorpoOutro) || 'nenhuma parte informada'}
+              </div>
+
+              <Campo
+                label="Lesão permanente"
+                htmlFor="ac-lesao"
+                erro={erros.lesaoPermanente}
+                ajuda="Define os dias debitados (NBR 14280), somados aos dias de afastamento na estatística."
+              >
+                <select
+                  id="ac-lesao"
+                  value={novo.lesaoPermanente}
+                  onChange={(e) => setNovo({ ...novo, lesaoPermanente: e.target.value as LesaoPermanente })}
+                >
+                  {LESOES_PERMANENTES.map((lesao) => (
+                    <option key={lesao} value={lesao}>
+                      {ROTULO_LESAO_PERMANENTE[lesao]}
+                      {DIAS_DEBITADOS[lesao] > 0 ? ` — ${DIAS_DEBITADOS[lesao]} dias debitados` : ''}
+                    </option>
+                  ))}
+                </select>
+              </Campo>
+              <div className="stat-grid" style={{ marginTop: 8 }}>
+                <div className="stat">
+                  <b>{diasAfastamentoNovo}</b>
+                  <span>dias de afastamento</span>
+                </div>
+                <div className="stat">
+                  <b style={{ color: diasDebitadosNovo > 0 ? 'var(--red)' : undefined }}>{diasDebitadosNovo}</b>
+                  <span>dias debitados</span>
+                </div>
+                <div className="stat">
+                  <b>{diasComputadosNovo}</b>
+                  <span>dias computados</span>
+                </div>
+              </div>
+            </div>
+          </div>
 
           <div className="filtros">
             <div className="check-linha">
@@ -459,6 +605,7 @@ export function AcidentesPage() {
                   <th>Acidente</th>
                   <th>Envolvido</th>
                   <th>Afastamento</th>
+                  <th>Lesão / dias computados</th>
                   <th>CAT</th>
                   <th>Investigação</th>
                   {podeEscrever ? <th aria-label="Ações" /> : null}
@@ -471,6 +618,7 @@ export function AcidentesPage() {
                     <td>
                       <b>{acidente.rotulos?.tipo ?? acidente.tipo}</b>
                       <div className="hint">{acidente.descricao.slice(0, 80)}</div>
+                      {acidente.parteCorpoAtingida ? <div className="hint">Atingido: {acidente.parteCorpoAtingida}</div> : null}
                     </td>
                     <td>
                       {acidente.colaborador?.nome ?? '—'}
@@ -482,6 +630,19 @@ export function AcidentesPage() {
                       ) : (
                         <span className="pill ok">Sem afastamento</span>
                       )}
+                    </td>
+                    <td>
+                      {acidente.lesaoPermanente && acidente.lesaoPermanente !== 'NENHUMA' ? (
+                        <span className="pill bad">
+                          {acidente.rotulos?.lesaoPermanente ?? ROTULO_LESAO_PERMANENTE[acidente.lesaoPermanente]}
+                        </span>
+                      ) : (
+                        <span className="hint">Sem lesão permanente</span>
+                      )}
+                      <div className="hint">
+                        <b>{acidente.diasComputados ?? acidente.diasAfastamento + (acidente.diasDebitados ?? 0)}</b> dia(s) computado(s)
+                        {acidente.diasDebitados ? ` · ${acidente.diasDebitados} debitado(s)` : ''}
+                      </div>
                     </td>
                     <td>
                       {acidente.catNumero ? (

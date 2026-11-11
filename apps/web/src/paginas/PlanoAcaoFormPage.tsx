@@ -46,6 +46,11 @@ export function PlanoAcaoFormPage() {
   const [notificacoes, setNotificacoes] = useState<NotificacaoApi[]>([]);
   const [enviandoEvidencia, setEnviandoEvidencia] = useState(false);
   const inputEvidencia = useRef<HTMLInputElement>(null);
+  const [enviandoAntes, setEnviandoAntes] = useState(false);
+  const inputAntes = useRef<HTMLInputElement>(null);
+  const [antesPendente, setAntesPendente] = useState<File | null>(null);
+  const previaAntes = useMemo(() => (antesPendente ? URL.createObjectURL(antesPendente) : null), [antesPendente]);
+  useEffect(() => () => { if (previaAntes) URL.revokeObjectURL(previaAntes); }, [previaAntes]);
   /** Foto escolhida antes de o plano existir: sobe logo depois do primeiro salvamento. */
   const [evidenciaPendente, setEvidenciaPendente] = useState<File | null>(null);
   const previaPendente = useMemo(() => (evidenciaPendente ? URL.createObjectURL(evidenciaPendente) : null), [evidenciaPendente]);
@@ -105,6 +110,7 @@ export function PlanoAcaoFormPage() {
           status: atual.status,
           dataConclusao: atual.dataConclusao ? paraDatetimeLocal(new Date(atual.dataConclusao)) : '',
           evidenciaUrl: atual.evidenciaUrl ?? '',
+          fotoInicialUrl: atual.fotoInicialUrl ?? '',
           comentarioConclusao: atual.comentarioConclusao ?? '',
           observacoes: atual.observacoes ?? '',
         });
@@ -130,7 +136,9 @@ export function PlanoAcaoFormPage() {
     setValue('criticidade', valor, { shouldDirty: true, shouldValidate: true });
 
     if (modoEdicao || !valor) return;
-    const horas = PRAZO_PADRAO_POR_CRITICIDADE[valor as CriticidadePlano];
+    // "Imediato" vale para a contencao; o plano corretivo recebe ao menos 24h,
+    // senao nasce vencido com a mesma data do relato.
+    const horas = Math.max(24, PRAZO_PADRAO_POR_CRITICIDADE[valor as CriticidadePlano]);
     setValue('prazo', paraDatetimeLocal(new Date(Date.now() + horas * 60 * 60 * 1000)), { shouldDirty: true });
   }
 
@@ -143,6 +151,14 @@ export function PlanoAcaoFormPage() {
       setPlano(salvo);
       mostrar(modoEdicao ? 'Plano atualizado.' : `Plano ${salvo.codigo} aberto.`, 'sucesso');
       if (!modoEdicao) {
+        if (antesPendente) {
+          try {
+            await api.upload<PlanoApi>(`/planos-acao/${salvo.id}/foto-inicial`, antesPendente);
+          } catch (erroFoto) {
+            mostrar(erroFoto instanceof Error ? `Plano salvo, mas a foto inicial falhou: ${erroFoto.message}` : 'Plano salvo, mas a foto inicial falhou.', 'erro');
+          }
+          setAntesPendente(null);
+        }
         if (evidenciaPendente) {
           try {
             await api.upload<PlanoApi>(`/planos-acao/${salvo.id}/evidencia`, evidenciaPendente);
@@ -187,6 +203,26 @@ export function PlanoAcaoFormPage() {
     }
   }
 
+  async function enviarFotoInicial(arquivo: File) {
+    if (!id) {
+      setAntesPendente(arquivo);
+      if (inputAntes.current) inputAntes.current.value = '';
+      return;
+    }
+    setEnviandoAntes(true);
+    try {
+      const atualizado = await api.upload<PlanoApi>(`/planos-acao/${id}/foto-inicial`, arquivo);
+      setPlano(atualizado);
+      setValue('fotoInicialUrl', atualizado.fotoInicialUrl ?? '', { shouldDirty: false });
+      mostrar('Foto da situação encontrada anexada.', 'sucesso');
+    } catch (erro) {
+      mostrar(erro instanceof Error ? erro.message : 'Falha ao enviar a foto.', 'erro');
+    } finally {
+      setEnviandoAntes(false);
+      if (inputAntes.current) inputAntes.current.value = '';
+    }
+  }
+
   if (carregando) {
     return (
       <div className="centro-tela">
@@ -198,6 +234,7 @@ export function PlanoAcaoFormPage() {
 
   const erro = (campo: keyof PlanoAcaoFormValues) => errors[campo]?.message as string | undefined;
   const evidenciaAtual = urlAbsoluta(valores.evidenciaUrl);
+  const antesAtual = urlAbsoluta(valores.fotoInicialUrl);
   const concluindo = valores.status === 'CONCLUIDO';
 
   return (
@@ -223,6 +260,13 @@ export function PlanoAcaoFormPage() {
           </div>
         ) : null}
       </div>
+
+      {plano?.cobrancaChefiaEm ? (
+        <div className="hint alerta">
+          <Icone nome="envelope" /> <b>Chefia cobrada em {formatarDataHora(plano.cobrancaChefiaEm)}.</b> A pendência passou da carência da
+          criticidade (10 dias Alta, 20 Média, 30 Baixa) e a cadeia hierárquica do cliente foi avisada por e-mail.
+        </div>
+      ) : null}
 
       {plano?.escalonamentoPendente ? (
         <div className="hint alerta">
@@ -324,9 +368,44 @@ export function PlanoAcaoFormPage() {
               </div>
 
               <Campo
-                label="Evidência da correção"
+                label="Foto da situação encontrada (antes)"
+                erro={erro('fotoInicialUrl')}
+                ajuda={plano?.origem === 'OBSERVACAO' ? 'Herdada da observação de origem; pode ser substituída.' : 'Registro do desvio antes da correção.'}
+              >
+                <div className="logo-box">
+                  <div className="logo-preview">
+                    {antesAtual ? (
+                      <a href={antesAtual} target="_blank" rel="noreferrer"><img src={antesAtual} alt="Antes" /></a>
+                    ) : previaAntes ? (
+                      <img src={previaAntes} alt="Antes (a enviar)" />
+                    ) : (
+                      <span aria-hidden="true"><Icone nome="camera" /></span>
+                    )}
+                  </div>
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    <input
+                      ref={inputAntes}
+                      type="file"
+                      accept="image/png,image/jpeg,image/webp"
+                      capture="environment"
+                      style={{ display: 'none' }}
+                      onChange={(evento) => {
+                        const arquivo = evento.target.files?.[0];
+                        if (arquivo) void enviarFotoInicial(arquivo);
+                      }}
+                    />
+                    <button type="button" className="btn btn-outline btn-sm" disabled={enviandoAntes} onClick={() => inputAntes.current?.click()}>
+                      <Icone nome="camera" /> {enviandoAntes ? 'Enviando...' : antesAtual || antesPendente ? 'Trocar foto' : 'Anexar foto inicial'}
+                    </button>
+                    {!modoEdicao && antesPendente ? <span className="ajuda">"{antesPendente.name}" será enviada ao salvar.</span> : null}
+                  </div>
+                </div>
+              </Campo>
+
+              <Campo
+                label="Evidência da correção (depois)"
                 erro={erro('evidenciaUrl')}
-                ajuda="Foto do antes/depois ou documento comprobatório."
+                ajuda="Foto da resolução ou documento comprobatório."
               >
                 <div className="logo-box">
                   <div className="logo-preview">
